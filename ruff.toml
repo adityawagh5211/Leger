@@ -4,7 +4,14 @@ src = ["backend"]
 
 [lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM"]
-ignore = ["E501"]
+ignore = [
+    "E501",   # line length handled by formatter
+    "B008",   # Depends() in defaults is idiomatic FastAPI
+    "B904",   # raise-from in exception handlers — too noisy for HTTP handlers
+    "SIM108", # ternary suggestions — readability preference
+    "SIM105", # contextlib.suppress — readability preference
+    "SIM117", # nested with — readability preference
+]
 
 [lint.isort]
 known-first-party = ["app"]

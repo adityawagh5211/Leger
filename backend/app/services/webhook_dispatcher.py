@@ -6,7 +6,7 @@ import hashlib
 import hmac
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -32,7 +32,7 @@ async def fire_event(
     """
     hooks = db.query(Webhook).filter(
         Webhook.user_id == user_id,
-        Webhook.is_active == True,
+        Webhook.is_active,
     ).all()
 
     matched = [h for h in hooks if event_type in h.events.split(",")]
@@ -43,7 +43,7 @@ async def fire_event(
     for hook in matched:
         try:
             await _deliver(hook, event_type, payload)
-            hook.last_triggered = datetime.now(timezone.utc)
+            hook.last_triggered = datetime.now(UTC)
             hook.failure_count = 0
             delivered += 1
         except Exception as e:
@@ -64,7 +64,7 @@ async def _deliver(hook: Webhook, event_type: str, payload: dict) -> None:
     """Send HMAC-signed POST to webhook URL."""
     body = json.dumps({
         "event": event_type,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "data": payload,
     }, default=str)
 

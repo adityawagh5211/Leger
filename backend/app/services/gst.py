@@ -40,13 +40,13 @@ def compute_gst(
 ) -> dict[str, Any]:
     """
     Compute GST for a transaction.
-    
+
     Args:
         amount: Transaction amount
         category: Category name
         merchant: Optional merchant name for override lookup
         is_inclusive: If True, amount already includes GST (default for Indian retail)
-    
+
     Returns:
         {"gst_rate": float, "gst_amount": Decimal, "base_amount": Decimal, "hsn_code": str|None}
     """

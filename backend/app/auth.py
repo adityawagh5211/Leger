@@ -1,5 +1,3 @@
-import json
-import sys
 
 import httpx
 from fastapi import Depends, Header, HTTPException
@@ -58,7 +56,7 @@ def _verify_token(token: str) -> UserContext:
 
     if provider == "supabase":
         try:
-            from jose import JWTError, jwt
+            from jose import jwt
             jwks = _get_jwks_sync()
             decoded = jwt.decode(
                 token, jwks,

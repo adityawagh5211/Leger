@@ -4,9 +4,6 @@ Data export — CSV, JSON, and Tally-compatible XML export for transactions.
 import csv
 import io
 import json
-from datetime import date
-from decimal import Decimal
-from typing import Any
 from xml.etree.ElementTree import Element, SubElement, tostring
 
 from ..models import Transaction

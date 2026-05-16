@@ -9,7 +9,8 @@ from typing import Any
 
 from ..config import settings
 from .ai_router import ai_router
-from .categorizer import CATEGORIES, EXPENSE_CATEGORIES, categorize as rule_categorize
+from .categorizer import CATEGORIES, EXPENSE_CATEGORIES
+from .categorizer import categorize as rule_categorize
 
 logger = logging.getLogger("ledger.autocategorize")
 

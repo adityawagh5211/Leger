@@ -3,7 +3,7 @@ AI Router — selects local llama.cpp or cloud Anthropic based on availability.
 Exposes a unified async streaming interface.
 """
 import json
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 import httpx
 

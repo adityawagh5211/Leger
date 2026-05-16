@@ -3,7 +3,6 @@ Credit health score — computes a financial health score (0-900) based on
 spending patterns, savings rate, budget adherence, and debt indicators.
 Similar to CIBIL range but based on behavioral data.
 """
-from decimal import Decimal
 from typing import Any
 
 
@@ -14,7 +13,7 @@ def compute_credit_health(
 ) -> dict[str, Any]:
     """
     Compute a financial health score from 300-900.
-    
+
     Factors:
     - Savings rate (25%)
     - Budget adherence (25%)

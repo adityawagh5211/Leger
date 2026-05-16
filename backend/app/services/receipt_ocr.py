@@ -5,7 +5,6 @@ Uses LLM vision (if llava is running) or falls back to basic regex extraction.
 import base64
 import json
 import logging
-import re
 from datetime import date
 from decimal import Decimal
 

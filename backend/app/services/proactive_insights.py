@@ -4,14 +4,14 @@ These go beyond the rule-based compute_insights() to provide personalized advice
 """
 import json
 import logging
+from collections import defaultdict
 from datetime import date, timedelta
 from decimal import Decimal
-from collections import defaultdict
 
-from ..models import Budget, Transaction
-from .insights import monthly_summary, recurring_payments
-from .ai_router import ai_router
 from ..config import settings
+from ..models import Budget, Transaction
+from .ai_router import ai_router
+from .insights import monthly_summary, recurring_payments
 
 logger = logging.getLogger("ledger.proactive")
 

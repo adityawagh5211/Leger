@@ -25,7 +25,7 @@ def log_event(
 ) -> AuditLog:
     """
     Record an audit event. This is append-only — no updates or deletes.
-    
+
     Args:
         action: "create", "update", "delete"
         resource_type: "transaction", "budget", "account", "import", "webhook"

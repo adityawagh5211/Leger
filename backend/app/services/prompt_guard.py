@@ -1,4 +1,5 @@
 import re
+
 from fastapi import HTTPException
 
 # Patterns that indicate prompt injection attempts

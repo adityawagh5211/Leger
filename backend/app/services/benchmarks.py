@@ -4,7 +4,6 @@ Provides percentile rankings against aggregated (anonymized) spending patterns.
 Uses synthetic reference data since we don't have multi-tenant data yet.
 """
 from collections import defaultdict
-from decimal import Decimal
 from typing import Any
 
 # Indian urban spending benchmarks (monthly, INR)

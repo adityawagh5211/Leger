@@ -4,7 +4,6 @@ import hashlib
 import logging
 import sys
 from datetime import date
-from decimal import Decimal
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,7 +16,17 @@ from sqlalchemy.orm import Session
 from .auth import get_current_user
 from .config import settings
 from .db import Base, engine, get_db
-from .models import Account, AIConversation, AIMessage, AuditLog, Budget, Holding, ImportJob, Portfolio, Transaction, Webhook
+from .models import (
+    Account,
+    AIConversation,
+    AIMessage,
+    Budget,
+    Holding,
+    ImportJob,
+    Portfolio,
+    Transaction,
+    Webhook,
+)
 from .schemas import (
     AccountIn,
     AccountOut,
@@ -40,7 +49,6 @@ from .schemas import (
     PortfolioIn,
     PortfolioOut,
     ProactiveInsight,
-    ReceiptResult,
     SmsParseRequest,
     TransactionIn,
     TransactionOut,
@@ -49,7 +57,13 @@ from .schemas import (
     WebhookOut,
 )
 from .services.ai_router import ai_router
+from .services.audit import get_audit_trail, log_event
 from .services.auto_categorizer import categorize_batch, categorize_single
+from .services.benchmarks import generate_benchmarks
+from .services.bill_negotiator import analyze_bills
+from .services.credit_health import compute_credit_health
+from .services.export import export_csv, export_json, export_tally_xml
+from .services.gst import generate_gst_report
 from .services.insights import (
     SYSTEM_PROMPT,
     build_advisor_context,
@@ -61,15 +75,8 @@ from .services.insights import (
 from .services.proactive_insights import generate_proactive_insights
 from .services.prompt_guard import build_safe_messages, sanitize_user_input
 from .services.receipt_ocr import parse_receipt_image
-from .services.audit import get_audit_trail, log_event
-from .services.benchmarks import generate_benchmarks
-from .services.bill_negotiator import analyze_bills
-from .services.credit_health import compute_credit_health
-from .services.export import export_csv, export_json, export_tally_xml
-from .services.gst import compute_gst, generate_gst_report
 from .services.sms_parser import parse_sms
 from .services.statements import parse_csv, parse_pdf
-from .services.webhook_dispatcher import fire_event
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -494,7 +501,7 @@ def list_accounts(
     db: Session = Depends(get_db),
 ):
     return db.query(Account).filter(
-        Account.user_id == user.id, Account.is_active == True
+        Account.user_id == user.id, Account.is_active
     ).order_by(Account.name).all()
 
 
@@ -891,7 +898,7 @@ def credit_health(
 ):
     transactions = _tx_query(db, user.id).limit(500).all()
     budgets = db.query(Budget).filter(Budget.user_id == user.id).all()
-    accounts = db.query(Account).filter(Account.user_id == user.id, Account.is_active == True).all()
+    accounts = db.query(Account).filter(Account.user_id == user.id, Account.is_active).all()
     return compute_credit_health(transactions, budgets, accounts)
 
 
