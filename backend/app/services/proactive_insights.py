@@ -2,6 +2,7 @@
 Proactive AI insights — generates financial observations on demand using LLM.
 These go beyond the rule-based compute_insights() to provide personalized advice.
 """
+
 import json
 import logging
 from collections import defaultdict
@@ -44,7 +45,9 @@ async def generate_proactive_insights(
 
     # Calculate trend data
     last_30 = [t for t in transactions if t.date >= date.today() - timedelta(days=30)]
-    prev_30 = [t for t in transactions if date.today() - timedelta(days=60) <= t.date < date.today() - timedelta(days=30)]
+    prev_30 = [
+        t for t in transactions if date.today() - timedelta(days=60) <= t.date < date.today() - timedelta(days=30)
+    ]
 
     last_spend = sum(t.amount for t in last_30 if t.type == "expense")
     prev_spend = sum(t.amount for t in prev_30 if t.type == "expense")
@@ -68,11 +71,11 @@ async def generate_proactive_insights(
                 f"Income: ₹{summary['income']} | Expenses: ₹{summary['expenses']} | Net: ₹{summary['net']}",
                 f"Spending trend: {'up' if trend_pct > 0 else 'down'} {abs(trend_pct):.0f}% vs last month",
             ]
-            for cat, amt in sorted(summary['by_category'].items(), key=lambda x: x[1], reverse=True)[:6]:
+            for cat, amt in sorted(summary["by_category"].items(), key=lambda x: x[1], reverse=True)[:6]:
                 limit = budget_map.get(cat)
                 change = ""
                 if cat in cat_prev and cat_prev[cat] > 0:
-                    c = ((cat_last[cat] - cat_prev[cat]) / cat_prev[cat] * 100)
+                    c = (cat_last[cat] - cat_prev[cat]) / cat_prev[cat] * 100
                     change = f" ({'up' if c > 0 else 'down'} {abs(c):.0f}%)"
                 budget_note = f" budget: ₹{limit}" if limit else ""
                 context_lines.append(f"  {cat}: ₹{amt}{budget_note}{change}")
@@ -96,26 +99,46 @@ async def generate_proactive_insights(
     insights = []
 
     if trend_pct > 15:
-        insights.append({"type": "warning", "text": f"Spending up {trend_pct:.0f}% vs last month — review your expenses."})
+        insights.append(
+            {"type": "warning", "text": f"Spending up {trend_pct:.0f}% vs last month — review your expenses."}
+        )
     elif trend_pct < -10:
-        insights.append({"type": "positive", "text": f"Spending down {abs(trend_pct):.0f}% vs last month — keep it up!"})
+        insights.append(
+            {"type": "positive", "text": f"Spending down {abs(trend_pct):.0f}% vs last month — keep it up!"}
+        )
 
-    for cat, spent in summary['by_category'].items():
+    for cat, spent in summary["by_category"].items():
         limit = budget_map.get(cat)
         if limit and spent > limit:
             insights.append({"type": "warning", "text": f"{cat} over budget by ₹{spent - limit}."})
         elif limit and spent >= limit * Decimal("0.9"):
-            days_left = (date(date.today().year, date.today().month % 12 + 1, 1) - date.today()).days if date.today().month < 12 else (date(date.today().year + 1, 1, 1) - date.today()).days
-            insights.append({"type": "warning", "text": f"{cat} at {int(spent/limit*100)}% of budget with {days_left} days left."})
+            days_left = (
+                (date(date.today().year, date.today().month % 12 + 1, 1) - date.today()).days
+                if date.today().month < 12
+                else (date(date.today().year + 1, 1, 1) - date.today()).days
+            )
+            insights.append(
+                {
+                    "type": "warning",
+                    "text": f"{cat} at {int(spent / limit * 100)}% of budget with {days_left} days left.",
+                }
+            )
 
     if len(recurring) >= 3:
-        total_recurring = sum(r['average_amount'] for r in recurring)
-        insights.append({"type": "info", "text": f"{len(recurring)} recurring payments totaling ~₹{total_recurring:.0f}/mo detected."})
+        total_recurring = sum(r["average_amount"] for r in recurring)
+        insights.append(
+            {
+                "type": "info",
+                "text": f"{len(recurring)} recurring payments totaling ~₹{total_recurring:.0f}/mo detected.",
+            }
+        )
 
-    savings_rate = (summary['net'] / summary['income'] * 100) if summary['income'] > 0 else 0
+    savings_rate = (summary["net"] / summary["income"] * 100) if summary["income"] > 0 else 0
     if savings_rate > 20:
-        insights.append({"type": "positive", "text": f"Saving {savings_rate:.0f}% of income — excellent financial health."})
-    elif savings_rate < 5 and summary['income'] > 0:
+        insights.append(
+            {"type": "positive", "text": f"Saving {savings_rate:.0f}% of income — excellent financial health."}
+        )
+    elif savings_rate < 5 and summary["income"] > 0:
         insights.append({"type": "tip", "text": f"Only saving {savings_rate:.0f}% of income — aim for 20% minimum."})
 
     return insights[:5] if insights else [{"type": "info", "text": "Add more transactions for personalized insights."}]

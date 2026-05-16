@@ -2,6 +2,7 @@
 Audit logging service — records all data mutations for compliance.
 Every create/update/delete on transactions, budgets, accounts is logged.
 """
+
 import json
 import logging
 from typing import Any
@@ -43,7 +44,10 @@ def log_event(
     # Don't commit here — let the caller's transaction commit it together
     logger.debug(
         "audit.%s user=%s %s/%s",
-        action, user_id, resource_type, resource_id or "—",
+        action,
+        user_id,
+        resource_type,
+        resource_id or "—",
     )
     return entry
 

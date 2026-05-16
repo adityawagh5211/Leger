@@ -9,8 +9,8 @@ _INJECTION_PATTERNS = [
     re.compile(r"forget\s+everything", re.IGNORECASE),
     re.compile(r"disregard\s+(all|your|previous)", re.IGNORECASE),
     re.compile(r"system\s+prompt", re.IGNORECASE),
-    re.compile(r"<\|.*?\|>"),          # Llama special tokens
-    re.compile(r"\[INST\]"),           # Mistral injection pattern
+    re.compile(r"<\|.*?\|>"),  # Llama special tokens
+    re.compile(r"\[INST\]"),  # Mistral injection pattern
     re.compile(r"###\s*system", re.IGNORECASE),
     re.compile(r"act\s+as\s+", re.IGNORECASE),
     re.compile(r"pretend\s+(you|to)\s+", re.IGNORECASE),

@@ -3,6 +3,7 @@ Credit health score — computes a financial health score (0-900) based on
 spending patterns, savings rate, budget adherence, and debt indicators.
 Similar to CIBIL range but based on behavioral data.
 """
+
 from typing import Any
 
 
@@ -45,6 +46,7 @@ def compute_credit_health(
     # 2. Budget adherence (0-225 points)
     if budgets:
         from collections import defaultdict
+
         cat_spent = defaultdict(float)
         for t in transactions:
             if t.type == "expense":
@@ -65,6 +67,7 @@ def compute_credit_health(
 
     # 3. Spending consistency (0-180 points) — low variance = good
     from collections import defaultdict
+
     daily_spend = defaultdict(float)
     for t in transactions:
         if t.type == "expense":
@@ -74,7 +77,7 @@ def compute_credit_health(
         vals = list(daily_spend.values())
         mean = sum(vals) / len(vals)
         variance = sum((v - mean) ** 2 for v in vals) / len(vals)
-        cv = (variance ** 0.5) / mean if mean > 0 else 0  # coefficient of variation
+        cv = (variance**0.5) / mean if mean > 0 else 0  # coefficient of variation
         if cv < 0.3:
             consistency_score = 180
         elif cv < 0.6:

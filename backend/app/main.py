@@ -169,8 +169,7 @@ def list_transactions(
         try:
             cursor_date, cursor_id = _cursor_decode(cursor)
             q = q.filter(
-                (Transaction.date < cursor_date)
-                | ((Transaction.date == cursor_date) & (Transaction.id < cursor_id))
+                (Transaction.date < cursor_date) | ((Transaction.date == cursor_date) & (Transaction.id < cursor_id))
             )
         except Exception:
             raise HTTPException(status_code=400, detail="Invalid cursor")
@@ -256,12 +255,17 @@ def budget_suggestions(
     db: Session = Depends(get_db),
 ):
     from datetime import timedelta
+
     today = date.today()
-    txs = db.query(Transaction).filter(
-        Transaction.user_id == user.id,
-        Transaction.type == "expense",
-        Transaction.date >= today - timedelta(days=92),
-    ).all()
+    txs = (
+        db.query(Transaction)
+        .filter(
+            Transaction.user_id == user.id,
+            Transaction.type == "expense",
+            Transaction.date >= today - timedelta(days=92),
+        )
+        .all()
+    )
     return dynamic_budget_suggestions(txs)
 
 
@@ -294,11 +298,15 @@ def import_sms(
         parsed = parse_sms(message)
         if not parsed:
             continue
-        duplicate = db.query(Transaction).filter(
-            Transaction.user_id == user.id,
-            Transaction.source == "sms",
-            Transaction.source_ref == parsed["source_ref"],
-        ).first()
+        duplicate = (
+            db.query(Transaction)
+            .filter(
+                Transaction.user_id == user.id,
+                Transaction.source == "sms",
+                Transaction.source_ref == parsed["source_ref"],
+            )
+            .first()
+        )
         if duplicate:
             continue
         tx = Transaction(user_id=user.id, **parsed)
@@ -346,16 +354,18 @@ async def import_statement(
             saved_count = 0
             for row in rows:
                 # SHA-256 dedup on date+amount+description
-                fingerprint = hashlib.sha256(
-                    f"{row['date']}{row['amount']}{row['description']}".encode()
-                ).hexdigest()
+                fingerprint = hashlib.sha256(f"{row['date']}{row['amount']}{row['description']}".encode()).hexdigest()
                 row["source_ref"] = fingerprint
 
-                duplicate = db.query(Transaction).filter(
-                    Transaction.user_id == user.id,
-                    Transaction.source == "statement",
-                    Transaction.source_ref == fingerprint,
-                ).first()
+                duplicate = (
+                    db.query(Transaction)
+                    .filter(
+                        Transaction.user_id == user.id,
+                        Transaction.source == "statement",
+                        Transaction.source_ref == fingerprint,
+                    )
+                    .first()
+                )
                 if not duplicate:
                     db.add(Transaction(user_id=user.id, **row))
                     saved_count += 1
@@ -406,10 +416,14 @@ async def advisor_stream(
     history = []
     conversation = None
     if payload.conversation_id:
-        conversation = db.query(AIConversation).filter(
-            AIConversation.id == payload.conversation_id,
-            AIConversation.user_id == user.id,
-        ).first()
+        conversation = (
+            db.query(AIConversation)
+            .filter(
+                AIConversation.id == payload.conversation_id,
+                AIConversation.user_id == user.id,
+            )
+            .first()
+        )
         if conversation:
             history = [
                 {"role": m.role, "content": m.content}
@@ -485,10 +499,14 @@ def get_conversation_messages(
     user: UserContext = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    conv = db.query(AIConversation).filter(
-        AIConversation.id == conv_id,
-        AIConversation.user_id == user.id,
-    ).first()
+    conv = (
+        db.query(AIConversation)
+        .filter(
+            AIConversation.id == conv_id,
+            AIConversation.user_id == user.id,
+        )
+        .first()
+    )
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return sorted(conv.messages, key=lambda m: m.created_at)
@@ -500,9 +518,7 @@ def list_accounts(
     user: UserContext = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return db.query(Account).filter(
-        Account.user_id == user.id, Account.is_active
-    ).order_by(Account.name).all()
+    return db.query(Account).filter(Account.user_id == user.id, Account.is_active).order_by(Account.name).all()
 
 
 @app.post("/accounts", response_model=AccountOut, status_code=201)
@@ -576,10 +592,15 @@ async def recategorize_uncategorized(
     db: Session = Depends(get_db),
 ):
     """Re-categorize all 'Other' transactions using LLM."""
-    txs = db.query(Transaction).filter(
-        Transaction.user_id == user.id,
-        Transaction.category == "Other",
-    ).limit(50).all()
+    txs = (
+        db.query(Transaction)
+        .filter(
+            Transaction.user_id == user.id,
+            Transaction.category == "Other",
+        )
+        .limit(50)
+        .all()
+    )
 
     if not txs:
         return {"updated": 0}
@@ -682,8 +703,14 @@ def create_webhook(
 ):
     hook = Webhook(user_id=user.id, **payload.model_dump())
     db.add(hook)
-    log_event(db, user_id=user.id, action="create", resource_type="webhook", resource_id=hook.id,
-             ip_address=request.client.host if request.client else None)
+    log_event(
+        db,
+        user_id=user.id,
+        action="create",
+        resource_type="webhook",
+        resource_id=hook.id,
+        ip_address=request.client.host if request.client else None,
+    )
     db.commit()
     db.refresh(hook)
     logger.info("webhook.created user=%s id=%s url=%s", user.id, hook.id, hook.url[:60])
@@ -701,8 +728,14 @@ def delete_webhook(
     if not hook or hook.user_id != user.id:
         raise HTTPException(status_code=404, detail="Webhook not found")
     db.delete(hook)
-    log_event(db, user_id=user.id, action="delete", resource_type="webhook", resource_id=webhook_id,
-             ip_address=request.client.host if request.client else None)
+    log_event(
+        db,
+        user_id=user.id,
+        action="delete",
+        resource_type="webhook",
+        resource_id=webhook_id,
+        ip_address=request.client.host if request.client else None,
+    )
     db.commit()
     return {"deleted": True}
 
@@ -923,4 +956,3 @@ def community_benchmarks(
 ):
     transactions = _tx_query(db, user.id).limit(500).all()
     return generate_benchmarks(transactions)
-

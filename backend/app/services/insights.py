@@ -65,10 +65,7 @@ def compute_insights(transactions: list[Transaction], budgets: list[Budget]) -> 
         elif ratio >= Decimal("0.8"):
             insights.append(f"{category} at {int(ratio * 100)}% of budget: ₹{spent} of ₹{budget}.")
 
-    recent = [
-        t for t in transactions
-        if t.type == "expense" and t.date >= date.today() - timedelta(days=7)
-    ]
+    recent = [t for t in transactions if t.type == "expense" and t.date >= date.today() - timedelta(days=7)]
     merchant_totals: dict[str, Decimal] = defaultdict(Decimal)
     for tx in recent:
         merchant_totals[tx.description] += tx.amount
@@ -89,12 +86,14 @@ def recurring_payments(transactions: list[Transaction]) -> list[dict]:
         if len(items) >= 2:
             amounts = [item.amount for item in items]
             avg = sum(amounts, Decimal("0")) / len(amounts)
-            recurring.append({
-                "description": description.title(),
-                "category": category,
-                "average_amount": avg,
-                "count": len(items),
-            })
+            recurring.append(
+                {
+                    "description": description.title(),
+                    "category": category,
+                    "average_amount": avg,
+                    "count": len(items),
+                }
+            )
     return sorted(recurring, key=lambda x: x["average_amount"], reverse=True)
 
 
@@ -120,19 +119,16 @@ def build_advisor_context(
         else:
             budget_lines.append(f"  {cat}: ₹{spent} (no budget set)")
 
-    recurring_lines = [
-        f"  {r['description']}: ~₹{r['average_amount']:.0f}/mo ({r['count']}x)"
-        for r in recurring[:4]
-    ]
+    recurring_lines = [f"  {r['description']}: ~₹{r['average_amount']:.0f}/mo ({r['count']}x)" for r in recurring[:4]]
 
-    context = f"""[Financial Snapshot — {date.today().strftime('%B %Y')}]
-Income: ₹{summary['income']} | Expenses: ₹{summary['expenses']} | Net: ₹{summary['net']}
+    context = f"""[Financial Snapshot — {date.today().strftime("%B %Y")}]
+Income: ₹{summary["income"]} | Expenses: ₹{summary["expenses"]} | Net: ₹{summary["net"]}
 
 Top Spending by Category:
-{chr(10).join(budget_lines) or '  No expense data yet.'}
+{chr(10).join(budget_lines) or "  No expense data yet."}
 
 Detected Recurring Payments:
-{chr(10).join(recurring_lines) or '  None detected.'}
+{chr(10).join(recurring_lines) or "  None detected."}
 
 Total transactions analyzed: {len(transactions)}"""
 

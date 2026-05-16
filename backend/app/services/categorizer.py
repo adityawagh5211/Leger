@@ -45,4 +45,3 @@ def categorize(description: str, tx_type: str = "expense") -> str:
         if needle in text:
             return category
     return "Other" if tx_type == "expense" else "Salary"
-

@@ -130,6 +130,7 @@ class AIMessage(Base):
 
 class AuditLog(Base):
     """Append-only audit trail for compliance."""
+
     __tablename__ = "audit_logs"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     user_id: Mapped[str] = mapped_column(String(64), index=True)
@@ -144,6 +145,7 @@ class AuditLog(Base):
 
 class Webhook(Base):
     """User-registered event webhooks."""
+
     __tablename__ = "webhooks"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
@@ -159,11 +161,12 @@ class Webhook(Base):
 
 class Portfolio(Base):
     """Investment portfolio for wealth tracking."""
+
     __tablename__ = "portfolios"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     name: Mapped[str] = mapped_column(String(128))
-    portfolio_type: Mapped[str] = mapped_column(String(32))   # stocks|mutual_funds|crypto|fixed_deposit|gold
+    portfolio_type: Mapped[str] = mapped_column(String(32))  # stocks|mutual_funds|crypto|fixed_deposit|gold
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     user: Mapped["User"] = relationship(back_populates="portfolios")
     holdings: Mapped[list["Holding"]] = relationship(back_populates="portfolio", cascade="all, delete-orphan")
@@ -171,18 +174,18 @@ class Portfolio(Base):
 
 class Holding(Base):
     """Individual holding within a portfolio."""
+
     __tablename__ = "holdings"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     portfolio_id: Mapped[str] = mapped_column(ForeignKey("portfolios.id"), index=True)
-    symbol: Mapped[str] = mapped_column(String(32))           # RELIANCE, NIFTYBEES, BTC
-    name: Mapped[str] = mapped_column(String(128))            # Reliance Industries
+    symbol: Mapped[str] = mapped_column(String(32))  # RELIANCE, NIFTYBEES, BTC
+    name: Mapped[str] = mapped_column(String(128))  # Reliance Industries
     quantity: Mapped[Decimal] = mapped_column(Numeric(14, 4))
     buy_price: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     current_price: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=Decimal("0"))
-    asset_type: Mapped[str] = mapped_column(String(32))       # equity|mf|etf|crypto|fd|gold
+    asset_type: Mapped[str] = mapped_column(String(32))  # equity|mf|etf|crypto|fd|gold
     purchase_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
     portfolio: Mapped["Portfolio"] = relationship(back_populates="holdings")
-

@@ -17,7 +17,9 @@ def _money(value) -> Decimal:
 def _normalize_frame(df: pd.DataFrame) -> list[dict]:
     normalized = {str(c).strip().lower(): c for c in df.columns}
     date_col = next((normalized[c] for c in normalized if "date" in c), None)
-    desc_col = next((normalized[c] for c in normalized if c in {"description", "details", "narration", "particulars"}), None)
+    desc_col = next(
+        (normalized[c] for c in normalized if c in {"description", "details", "narration", "particulars"}), None
+    )
     amount_col = next((normalized[c] for c in normalized if "amount" in c), None)
     debit_col = next((normalized[c] for c in normalized if "debit" in c or "withdraw" in c), None)
     credit_col = next((normalized[c] for c in normalized if "credit" in c or "deposit" in c), None)
@@ -42,14 +44,16 @@ def _normalize_frame(df: pd.DataFrame) -> list[dict]:
             amount = credit if credit > 0 else debit
         if amount <= 0:
             continue
-        rows.append({
-            "date": parsed_date.date(),
-            "type": tx_type,
-            "amount": amount,
-            "description": description,
-            "category": categorize(description, tx_type),
-            "source": "statement",
-        })
+        rows.append(
+            {
+                "date": parsed_date.date(),
+                "type": tx_type,
+                "amount": amount,
+                "description": description,
+                "category": categorize(description, tx_type),
+                "source": "statement",
+            }
+        )
     return rows
 
 

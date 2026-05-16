@@ -2,22 +2,23 @@
 GST-aware categorization — maps transaction categories to Indian GST rates.
 Provides automatic GST computation and HSN/SAC code resolution.
 """
+
 from decimal import Decimal
 from typing import Any
 
 # Standard GST rates by category
 # SAC = Services, HSN = Goods
 GST_MAP: dict[str, dict[str, Any]] = {
-    "Dining":         {"rate": 5.0,  "sac": "9963",  "label": "Restaurant services"},
-    "Groceries":      {"rate": 0.0,  "sac": None,    "label": "Essential food (exempt)"},
-    "Transport":      {"rate": 5.0,  "sac": "9964",  "label": "Passenger transport"},
-    "Shopping":       {"rate": 18.0, "hsn": "6201",  "label": "General merchandise"},
-    "Subscriptions":  {"rate": 18.0, "sac": "9984",  "label": "Digital services"},
-    "Health":         {"rate": 5.0,  "sac": "9993",  "label": "Healthcare services"},
-    "Utilities":      {"rate": 18.0, "sac": "9969",  "label": "Telecom & utilities"},
-    "Entertainment":  {"rate": 28.0, "sac": "9996",  "label": "Amusement & recreation"},
-    "Housing":        {"rate": 0.0,  "sac": None,    "label": "Rent (exempt)"},
-    "Other":          {"rate": 18.0, "sac": "9997",  "label": "Other services"},
+    "Dining": {"rate": 5.0, "sac": "9963", "label": "Restaurant services"},
+    "Groceries": {"rate": 0.0, "sac": None, "label": "Essential food (exempt)"},
+    "Transport": {"rate": 5.0, "sac": "9964", "label": "Passenger transport"},
+    "Shopping": {"rate": 18.0, "hsn": "6201", "label": "General merchandise"},
+    "Subscriptions": {"rate": 18.0, "sac": "9984", "label": "Digital services"},
+    "Health": {"rate": 5.0, "sac": "9993", "label": "Healthcare services"},
+    "Utilities": {"rate": 18.0, "sac": "9969", "label": "Telecom & utilities"},
+    "Entertainment": {"rate": 28.0, "sac": "9996", "label": "Amusement & recreation"},
+    "Housing": {"rate": 0.0, "sac": None, "label": "Rent (exempt)"},
+    "Other": {"rate": 18.0, "sac": "9997", "label": "Other services"},
 }
 
 # Common merchant-level overrides (some merchants are composition scheme etc.)

@@ -7,9 +7,7 @@ from .categorizer import categorize
 
 # ── Patterns ───────────────────────────────────────────────────────────────────
 
-AMOUNT_RE = re.compile(
-    r"(?:rs\.?|inr|₹)\s*([0-9,]+(?:\.[0-9]{1,2})?)", re.IGNORECASE
-)
+AMOUNT_RE = re.compile(r"(?:rs\.?|inr|₹)\s*([0-9,]+(?:\.[0-9]{1,2})?)", re.IGNORECASE)
 
 MERCHANT_PATTERNS = [
     re.compile(

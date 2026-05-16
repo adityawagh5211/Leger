@@ -2,6 +2,7 @@
 Webhook dispatcher — fires HMAC-signed events to registered URLs.
 Runs in background, auto-disables after 5 consecutive failures.
 """
+
 import hashlib
 import hmac
 import json
@@ -30,10 +31,14 @@ async def fire_event(
     Fire an event to all matching active webhooks for a user.
     Returns the number of webhooks successfully notified.
     """
-    hooks = db.query(Webhook).filter(
-        Webhook.user_id == user_id,
-        Webhook.is_active,
-    ).all()
+    hooks = (
+        db.query(Webhook)
+        .filter(
+            Webhook.user_id == user_id,
+            Webhook.is_active,
+        )
+        .all()
+    )
 
     matched = [h for h in hooks if event_type in h.events.split(",")]
     if not matched:
@@ -50,7 +55,10 @@ async def fire_event(
             hook.failure_count += 1
             logger.warning(
                 "webhook.failed id=%s url=%s attempt=%d error=%s",
-                hook.id, hook.url[:60], hook.failure_count, str(e)[:100],
+                hook.id,
+                hook.url[:60],
+                hook.failure_count,
+                str(e)[:100],
             )
             if hook.failure_count >= MAX_FAILURES:
                 hook.is_active = False
@@ -62,11 +70,14 @@ async def fire_event(
 
 async def _deliver(hook: Webhook, event_type: str, payload: dict) -> None:
     """Send HMAC-signed POST to webhook URL."""
-    body = json.dumps({
-        "event": event_type,
-        "timestamp": datetime.now(UTC).isoformat(),
-        "data": payload,
-    }, default=str)
+    body = json.dumps(
+        {
+            "event": event_type,
+            "timestamp": datetime.now(UTC).isoformat(),
+            "data": payload,
+        },
+        default=str,
+    )
 
     signature = hmac.new(
         hook.secret.encode(),

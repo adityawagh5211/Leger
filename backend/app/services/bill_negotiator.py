@@ -2,6 +2,7 @@
 AI Bill Negotiator — analyzes recurring payments and generates
 negotiation strategies using LLM to help users reduce costs.
 """
+
 import json
 import logging
 from typing import Any
@@ -105,24 +106,28 @@ def _rule_based_analysis(payments: list[dict]) -> list[dict]:
 
         rule = NEGOTIABLE_CATEGORIES.get(category)
         if rule:
-            results.append({
-                "merchant": merchant,
-                "current_cost": amount,
-                "negotiable": rule["negotiable"],
-                "savings_potential": round(amount * rule["savings_pct"], 2),
-                "strategy": rule["strategy"],
-                "alternatives": [],
-                "difficulty": rule["difficulty"],
-            })
+            results.append(
+                {
+                    "merchant": merchant,
+                    "current_cost": amount,
+                    "negotiable": rule["negotiable"],
+                    "savings_potential": round(amount * rule["savings_pct"], 2),
+                    "strategy": rule["strategy"],
+                    "alternatives": [],
+                    "difficulty": rule["difficulty"],
+                }
+            )
         elif amount > 500:  # flag any large recurring payment
-            results.append({
-                "merchant": merchant,
-                "current_cost": amount,
-                "negotiable": False,
-                "savings_potential": 0,
-                "strategy": "Review if this service is still needed. Consider downgrading to a basic plan.",
-                "alternatives": [],
-                "difficulty": "easy",
-            })
+            results.append(
+                {
+                    "merchant": merchant,
+                    "current_cost": amount,
+                    "negotiable": False,
+                    "savings_potential": 0,
+                    "strategy": "Review if this service is still needed. Consider downgrading to a basic plan.",
+                    "alternatives": [],
+                    "difficulty": "easy",
+                }
+            )
 
     return results

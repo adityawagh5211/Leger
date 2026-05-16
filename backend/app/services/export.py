@@ -1,6 +1,7 @@
 """
 Data export — CSV, JSON, and Tally-compatible XML export for transactions.
 """
+
 import csv
 import io
 import json
@@ -14,27 +15,40 @@ def export_csv(transactions: list[Transaction]) -> str:
     """Export transactions as CSV string."""
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow([
-        "Date", "Type", "Category", "Amount", "Description",
-        "Merchant", "Source", "Tags", "Notes",
-        "GST Rate", "GST Amount", "HSN/SAC Code",
-    ])
+    writer.writerow(
+        [
+            "Date",
+            "Type",
+            "Category",
+            "Amount",
+            "Description",
+            "Merchant",
+            "Source",
+            "Tags",
+            "Notes",
+            "GST Rate",
+            "GST Amount",
+            "HSN/SAC Code",
+        ]
+    )
     for tx in transactions:
         gst = compute_gst(tx.amount, tx.category, tx.merchant_normalized)
-        writer.writerow([
-            tx.date.isoformat(),
-            tx.type,
-            tx.category,
-            str(tx.amount),
-            tx.description,
-            tx.merchant_normalized or "",
-            tx.source,
-            tx.tags or "",
-            tx.notes or "",
-            gst["gst_rate"],
-            str(gst["gst_amount"]),
-            gst["hsn_code"] or "",
-        ])
+        writer.writerow(
+            [
+                tx.date.isoformat(),
+                tx.type,
+                tx.category,
+                str(tx.amount),
+                tx.description,
+                tx.merchant_normalized or "",
+                tx.source,
+                tx.tags or "",
+                tx.notes or "",
+                gst["gst_rate"],
+                str(gst["gst_amount"]),
+                gst["hsn_code"] or "",
+            ]
+        )
     return output.getvalue()
 
 
@@ -43,25 +57,27 @@ def export_json(transactions: list[Transaction]) -> str:
     rows = []
     for tx in transactions:
         gst = compute_gst(tx.amount, tx.category, tx.merchant_normalized)
-        rows.append({
-            "id": tx.id,
-            "date": tx.date.isoformat(),
-            "type": tx.type,
-            "category": tx.category,
-            "amount": float(tx.amount),
-            "description": tx.description,
-            "merchant": tx.merchant_normalized,
-            "source": tx.source,
-            "tags": tx.tags,
-            "notes": tx.notes,
-            "gst": {
-                "rate": gst["gst_rate"],
-                "amount": float(gst["gst_amount"]),
-                "base_amount": float(gst["base_amount"]),
-                "hsn_code": gst["hsn_code"],
-            },
-            "created_at": tx.created_at.isoformat() if tx.created_at else None,
-        })
+        rows.append(
+            {
+                "id": tx.id,
+                "date": tx.date.isoformat(),
+                "type": tx.type,
+                "category": tx.category,
+                "amount": float(tx.amount),
+                "description": tx.description,
+                "merchant": tx.merchant_normalized,
+                "source": tx.source,
+                "tags": tx.tags,
+                "notes": tx.notes,
+                "gst": {
+                    "rate": gst["gst_rate"],
+                    "amount": float(gst["gst_amount"]),
+                    "base_amount": float(gst["base_amount"]),
+                    "hsn_code": gst["hsn_code"],
+                },
+                "created_at": tx.created_at.isoformat() if tx.created_at else None,
+            }
+        )
     return json.dumps({"transactions": rows, "count": len(rows)}, indent=2)
 
 

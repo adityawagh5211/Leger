@@ -3,6 +3,7 @@ Community benchmarks — anonymous spending comparisons.
 Provides percentile rankings against aggregated (anonymized) spending patterns.
 Uses synthetic reference data since we don't have multi-tenant data yet.
 """
+
 from collections import defaultdict
 from typing import Any
 
@@ -69,15 +70,17 @@ def generate_benchmarks(transactions: list) -> dict[str, Any]:
             status = "high"
             label = "Above average"
 
-        categories.append({
-            "category": cat,
-            "your_spend": round(spent, 2),
-            "percentile": percentile,
-            "status": status,
-            "label": label,
-            "benchmark_median": benchmarks["p50"],
-            "benchmark_p75": benchmarks["p75"],
-        })
+        categories.append(
+            {
+                "category": cat,
+                "your_spend": round(spent, 2),
+                "percentile": percentile,
+                "status": status,
+                "label": label,
+                "benchmark_median": benchmarks["p50"],
+                "benchmark_p75": benchmarks["p75"],
+            }
+        )
 
     # Sort by percentile descending (highest spenders first)
     categories.sort(key=lambda c: c["percentile"], reverse=True)

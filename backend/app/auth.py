@@ -1,4 +1,3 @@
-
 import httpx
 from fastapi import Depends, Header, HTTPException
 from sqlalchemy.orm import Session
@@ -47,6 +46,7 @@ def _verify_token(token: str) -> UserContext:
         try:
             import firebase_admin
             from firebase_admin import auth as firebase_auth
+
             if not firebase_admin._apps:
                 firebase_admin.initialize_app()
             decoded = firebase_auth.verify_id_token(token)
@@ -57,9 +57,11 @@ def _verify_token(token: str) -> UserContext:
     if provider == "supabase":
         try:
             from jose import jwt
+
             jwks = _get_jwks_sync()
             decoded = jwt.decode(
-                token, jwks,
+                token,
+                jwks,
                 algorithms=["RS256"],
                 options={"verify_aud": False},
             )

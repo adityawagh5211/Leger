@@ -3,6 +3,7 @@ LLM-powered auto-categorization.
 Uses the AI router to categorize transactions that fall into "Other".
 Falls back to rule-based categorizer if LLM is unavailable.
 """
+
 import json
 import logging
 from typing import Any
@@ -126,7 +127,7 @@ async def categorize_batch(transactions: list[dict]) -> list[dict[str, Any]]:
         cats = ", ".join(EXPENSE_CATEGORIES)
         system = BATCH_CATEGORIZE_SYSTEM.format(categories=cats)
         user_content = "\n".join(
-            f'- id: {tx["id"]}, description: {tx["description"]}'
+            f"- id: {tx['id']}, description: {tx['description']}"
             for tx in needs_llm[:20]  # limit batch size
         )
         messages = [{"role": "user", "content": user_content}]

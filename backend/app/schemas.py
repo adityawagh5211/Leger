@@ -6,12 +6,14 @@ from pydantic import BaseModel, Field
 
 # ── Auth ─────────────────────────────────────────────────────────────────────
 
+
 class UserContext(BaseModel):
     id: str
     email: str | None = None
 
 
 # ── Accounts ─────────────────────────────────────────────────────────────────
+
 
 class AccountIn(BaseModel):
     name: str = Field(min_length=1, max_length=128)
@@ -31,6 +33,7 @@ class AccountOut(AccountIn):
 
 
 # ── Transactions ─────────────────────────────────────────────────────────────
+
 
 class TransactionIn(BaseModel):
     date: date
@@ -73,6 +76,7 @@ class PaginatedTransactions(BaseModel):
 
 # ── Budgets ───────────────────────────────────────────────────────────────────
 
+
 class BudgetIn(BaseModel):
     category: str
     monthly_limit: Decimal = Field(ge=0)
@@ -87,6 +91,7 @@ class BudgetOut(BudgetIn):
 
 
 # ── Imports ───────────────────────────────────────────────────────────────────
+
 
 class SmsParseRequest(BaseModel):
     messages: list[str] = Field(min_length=1, max_length=100)
@@ -104,6 +109,7 @@ class ImportJobOut(BaseModel):
 
 
 # ── AI Advisor ────────────────────────────────────────────────────────────────
+
 
 class AdvisorRequest(BaseModel):
     question: str = Field(min_length=1, max_length=1000)
@@ -130,6 +136,7 @@ class MessageOut(BaseModel):
 
 # ── Auto-categorize ──────────────────────────────────────────────────────────
 
+
 class CategorizeSingleRequest(BaseModel):
     description: str = Field(min_length=1, max_length=300)
     tx_type: str = "expense"
@@ -148,12 +155,14 @@ class CategorizeBatchRequest(BaseModel):
 
 # ── Proactive Insights ───────────────────────────────────────────────────────
 
+
 class ProactiveInsight(BaseModel):
-    type: str   # warning | tip | positive | info
+    type: str  # warning | tip | positive | info
     text: str
 
 
 # ── Receipt ──────────────────────────────────────────────────────────────────
+
 
 class ReceiptResult(BaseModel):
     description: str
@@ -168,6 +177,7 @@ class ReceiptResult(BaseModel):
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 
+
 class SummaryOut(BaseModel):
     income: Decimal
     expenses: Decimal
@@ -179,6 +189,7 @@ class SummaryOut(BaseModel):
 
 
 # ── Audit Log ─────────────────────────────────────────────────────────────────
+
 
 class AuditLogOut(BaseModel):
     id: str
@@ -194,9 +205,10 @@ class AuditLogOut(BaseModel):
 
 # ── Webhooks ──────────────────────────────────────────────────────────────────
 
+
 class WebhookIn(BaseModel):
     url: str = Field(min_length=10, max_length=2048)
-    events: str = Field(min_length=1, max_length=512)   # comma-separated event names
+    events: str = Field(min_length=1, max_length=512)  # comma-separated event names
     secret: str = Field(min_length=16, max_length=64)
 
 
@@ -214,6 +226,7 @@ class WebhookOut(BaseModel):
 
 # ── GST Report ────────────────────────────────────────────────────────────────
 
+
 class GSTSlabOut(BaseModel):
     rate: float
     count: int
@@ -229,6 +242,7 @@ class GSTReportOut(BaseModel):
 
 
 # ── Portfolio ─────────────────────────────────────────────────────────────────
+
 
 class PortfolioIn(BaseModel):
     name: str = Field(min_length=1, max_length=128)
@@ -262,6 +276,7 @@ class HoldingOut(HoldingIn):
 
 # ── Credit Health ─────────────────────────────────────────────────────────────
 
+
 class CreditHealthOut(BaseModel):
     score: int
     grade: str
@@ -271,6 +286,7 @@ class CreditHealthOut(BaseModel):
 
 
 # ── Benchmarks ────────────────────────────────────────────────────────────────
+
 
 class BenchmarkCategory(BaseModel):
     category: str
@@ -289,5 +305,3 @@ class BenchmarkOut(BaseModel):
     categories: list[BenchmarkCategory]
     sample_size: str
     methodology: str
-
-

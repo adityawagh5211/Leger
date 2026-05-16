@@ -50,8 +50,7 @@ class Settings(BaseSettings):
                 sys.exit(1)
             if not self.anthropic_api_key and not self.llama_enabled:
                 print(
-                    "WARNING: No AI backend configured. "
-                    "Set ANTHROPIC_API_KEY or LLAMA_ENABLED=true.",
+                    "WARNING: No AI backend configured. Set ANTHROPIC_API_KEY or LLAMA_ENABLED=true.",
                     file=sys.stderr,
                 )
         elif self.auth_provider == "dev":

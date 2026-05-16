@@ -2,6 +2,7 @@
 Receipt OCR — extract transaction data from receipt images.
 Uses LLM vision (if llava is running) or falls back to basic regex extraction.
 """
+
 import base64
 import json
 import logging
@@ -54,13 +55,15 @@ async def _llm_vision_parse(image_bytes: bytes) -> dict | None:
                 f"{settings.llama_server_url}/v1/chat/completions",
                 json={
                     "model": "llava",
-                    "messages": [{
-                        "role": "user",
-                        "content": [
-                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
-                            {"type": "text", "text": VISION_PROMPT},
-                        ],
-                    }],
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
+                                {"type": "text", "text": VISION_PROMPT},
+                            ],
+                        }
+                    ],
                     "max_tokens": 300,
                 },
             )
@@ -85,10 +88,21 @@ async def _llm_vision_parse(image_bytes: bytes) -> dict | None:
             return {
                 "description": merchant,
                 "amount": Decimal(str(amount)),
-                "category": category if category in [
-                    "Dining","Groceries","Shopping","Health","Transport",
-                    "Utilities","Entertainment","Subscriptions","Housing","Other"
-                ] else categorize(merchant, "expense"),
+                "category": category
+                if category
+                in [
+                    "Dining",
+                    "Groceries",
+                    "Shopping",
+                    "Health",
+                    "Transport",
+                    "Utilities",
+                    "Entertainment",
+                    "Subscriptions",
+                    "Housing",
+                    "Other",
+                ]
+                else categorize(merchant, "expense"),
                 "date": parsed_date or date.today(),
                 "type": "expense",
                 "source": "receipt",
