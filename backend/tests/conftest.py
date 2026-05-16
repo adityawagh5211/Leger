@@ -1,6 +1,7 @@
 """
 Shared test fixtures — in-memory SQLite database and FastAPI test client.
 """
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -9,7 +10,6 @@ from sqlalchemy.pool import StaticPool
 
 from app.db import Base, get_db
 from app.main import app
-
 
 # In-memory SQLite for tests
 TEST_ENGINE = create_engine(
