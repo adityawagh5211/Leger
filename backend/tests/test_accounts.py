@@ -1,6 +1,7 @@
 """
 Tests for account management endpoints.
 """
+
 from .conftest import AUTH_HEADER
 
 

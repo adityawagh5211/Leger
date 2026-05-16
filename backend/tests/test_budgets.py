@@ -2,6 +2,7 @@
 Tests for budget endpoints.
 Budgets use PUT /budgets (upsert with list), not POST.
 """
+
 from .conftest import AUTH_HEADER
 
 

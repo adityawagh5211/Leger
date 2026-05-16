@@ -1,6 +1,7 @@
 """
 Tests for portfolio and holding endpoints.
 """
+
 from .conftest import AUTH_HEADER
 
 

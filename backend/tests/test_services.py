@@ -1,6 +1,7 @@
 """
 Tests for AI/analytics service endpoints (credit health, benchmarks).
 """
+
 from .conftest import AUTH_HEADER
 
 
