@@ -1,6 +1,5 @@
 """
-AI Router — selects local llama.cpp or cloud Anthropic based on availability.
-Exposes a unified async streaming interface.
+AI Router — streams responses from cloud Anthropic API.
 """
 
 import json
@@ -9,28 +8,6 @@ from collections.abc import AsyncIterator
 import httpx
 
 from ..config import settings
-
-
-from .llama_engine import llama_engine
-
-class LocalAdapter:
-    """Calls embedded llama-cpp-python engine."""
-
-    async def is_available(self) -> bool:
-        if not settings.llama_enabled:
-            return False
-        # Lazy load check
-        model = await llama_engine._get_model()
-        return model is not None
-
-    async def stream(
-        self,
-        system: str,
-        messages: list[dict],
-        max_tokens: int = 512,
-    ) -> AsyncIterator[str]:
-        async for chunk in llama_engine.stream(system, messages, max_tokens):
-            yield chunk
 
 
 class AnthropicAdapter:
@@ -79,10 +56,9 @@ class AnthropicAdapter:
 
 
 class AIRouter:
-    """Routes AI requests: local llama.cpp first, Anthropic fallback."""
+    """Routes AI requests: Anthropic only."""
 
     def __init__(self):
-        self.local = LocalAdapter()
         self.cloud = AnthropicAdapter()
 
     async def stream(
@@ -90,16 +66,8 @@ class AIRouter:
         system: str,
         messages: list[dict],
         max_tokens: int = 512,
-        prefer_local: bool = True,
+        prefer_local: bool = False, # Kept for signature compatibility but ignored
     ) -> AsyncIterator[str]:
-        if prefer_local and await self.local.is_available():
-            try:
-                async for token in self.local.stream(system, messages, max_tokens):
-                    yield token
-                return
-            except Exception:
-                pass  # Fall through to cloud
-
         async for token in self.cloud.stream(system, messages, max_tokens):
             yield token
 

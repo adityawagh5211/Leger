@@ -50,7 +50,7 @@ async def categorize_single(description: str, tx_type: str = "expense") -> dict[
         }
 
     # 2. If rules returned "Other", try LLM
-    if not settings.llama_enabled and not settings.anthropic_api_key:
+    if not settings.anthropic_api_key:
         return {
             "category": "Other",
             "confidence": 0.1,
@@ -64,7 +64,7 @@ async def categorize_single(description: str, tx_type: str = "expense") -> dict[
         messages = [{"role": "user", "content": f"Transaction: {description}"}]
 
         chunks = []
-        async for token in ai_router.stream(system, messages, max_tokens=100, prefer_local=True):
+        async for token in ai_router.stream(system, messages, max_tokens=100):
             chunks.append(token)
         raw = "".join(chunks).strip()
 
@@ -112,7 +112,7 @@ async def categorize_batch(transactions: list[dict]) -> list[dict[str, Any]]:
             needs_llm.append(tx)
 
     # If nothing needs LLM or LLM unavailable, return early
-    if not needs_llm or (not settings.llama_enabled and not settings.anthropic_api_key):
+    if not needs_llm or not settings.anthropic_api_key:
         for tx in needs_llm:
             results[tx["id"]] = {
                 "id": tx["id"],
@@ -133,7 +133,7 @@ async def categorize_batch(transactions: list[dict]) -> list[dict[str, Any]]:
         messages = [{"role": "user", "content": user_content}]
 
         chunks = []
-        async for token in ai_router.stream(system, messages, max_tokens=500, prefer_local=True):
+        async for token in ai_router.stream(system, messages, max_tokens=500):
             chunks.append(token)
         raw = "".join(chunks).strip()
         parsed = json.loads(raw)

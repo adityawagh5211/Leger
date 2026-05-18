@@ -64,7 +64,7 @@ async def generate_proactive_insights(
             cat_prev[t.category] += t.amount
 
     # Try LLM for rich insights
-    if settings.llama_enabled or settings.anthropic_api_key:
+    if settings.anthropic_api_key:
         try:
             context_lines = [
                 f"Period: {date.today().strftime('%B %Y')}",
@@ -87,7 +87,7 @@ async def generate_proactive_insights(
 
             messages = [{"role": "user", "content": "\n".join(context_lines)}]
             chunks = []
-            async for token in ai_router.stream(PROACTIVE_SYSTEM, messages, max_tokens=300, prefer_local=True):
+            async for token in ai_router.stream(PROACTIVE_SYSTEM, messages, max_tokens=300):
                 chunks.append(token)
             raw = "".join(chunks).strip()
             return json.loads(raw)

@@ -15,9 +15,6 @@ class Settings(BaseSettings):
     # AI — Cloud
     anthropic_api_key: str | None = None
 
-    # AI — Local (llama.cpp engine)
-    llama_model_path: str = r"C:\Users\ASUS\Downloads\GPT-2_model\models\qwen2.5-1.5b-instruct-q4_k_m.gguf"
-    llama_enabled: bool = False
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"
@@ -48,9 +45,9 @@ class Settings(BaseSettings):
                     file=sys.stderr,
                 )
                 sys.exit(1)
-            if not self.anthropic_api_key and not self.llama_enabled:
+            if not self.anthropic_api_key:
                 print(
-                    "WARNING: No AI backend configured. Set ANTHROPIC_API_KEY or LLAMA_ENABLED=true.",
+                    "WARNING: No AI backend configured. Set ANTHROPIC_API_KEY.",
                     file=sys.stderr,
                 )
         elif self.auth_provider == "dev":

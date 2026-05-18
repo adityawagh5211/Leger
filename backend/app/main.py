@@ -138,7 +138,7 @@ def _cursor_decode(cursor: str) -> tuple[date, str]:
 # ── Health ────────────────────────────────────────────────────────────────────
 @app.get("/health")
 def health():
-    return {"ok": True, "version": "2.0.0", "ai_local": settings.llama_enabled}
+    return {"ok": True, "version": "2.0.0"}
 
 
 # ── Transactions ──────────────────────────────────────────────────────────────

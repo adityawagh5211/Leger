@@ -149,56 +149,65 @@ def _parse_text_rows(text: str) -> list[dict]:
 
 # ── OCR pipeline for scanned/image PDFs ─────────────────────────
 
-def _paddleocr_parse_pdf(content: bytes) -> str:
+async def _anthropic_parse_pdf(content: bytes) -> str:
     """
-    Render PDF pages to images and use PaddleOCR to extract text blocks.
+    Send the PDF to Anthropic Claude 3.5 Sonnet to extract the transaction text
+    since it natively supports PDF parsing (both text and image-based PDFs).
     Returns concatenated raw text for the regex parser.
     """
-    try:
-        import os
-        # Disable MKLDNN to fix Windows CPU (Unimplemented) ConvertPirAttribute2RuntimeAttribute bug
-        os.environ['PADDLE_PDX_ENABLE_MKLDNN_BYDEFAULT'] = '0'
-        import pypdfium2 as pdfium
-        from paddleocr import PaddleOCR
-        import numpy as np
-    except ImportError:
-        logger.warning("Required image/pdf processing libraries (paddleocr) not available.")
+    if not settings.anthropic_api_key:
+        logger.warning("No Anthropic API key found. Cannot parse image-based PDF.")
         return ""
 
-    texts: list[str] = []
-    try:
-        doc = pdfium.PdfDocument(content)
-    except Exception as e:
-        logger.warning("pypdfium2 failed to open PDF: %s", e)
-        return ""
+    logger.info("Sending PDF to Anthropic for extraction...")
+    
+    b64_pdf = base64.b64encode(content).decode("utf-8")
+    
+    payload = {
+        "model": "claude-3-5-sonnet-latest",
+        "max_tokens": 4096,
+        "system": "You are a financial data extraction assistant. Extract all transaction rows from this bank statement. Maintain the original row structure so regex can parse it. Do not add any extra commentary.",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "document",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "application/pdf",
+                            "data": b64_pdf
+                        }
+                    },
+                    {
+                        "type": "text",
+                        "text": "Extract all transactions."
+                    }
+                ]
+            }
+        ]
+    }
 
     try:
-        # Initialize OCR once (downloads models if first run)
-        logging.getLogger("ppocr").setLevel(logging.WARNING)
-        ocr = PaddleOCR(use_angle_cls=False, lang="en")
-    except Exception as e:
-        logger.warning("Failed to initialize PaddleOCR: %s", e)
+        async with httpx.AsyncClient(timeout=120) as client:
+            response = await client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": settings.anthropic_api_key,
+                    "anthropic-version": "2023-06-01",
+                    "anthropic-beta": "pdfs-2024-09-25"
+                },
+                json=payload,
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data["content"][0]["text"]
+            
+    except (json.JSONDecodeError, KeyError, httpx.HTTPError) as e:
+        logger.warning("Anthropic PDF extraction failed: %s", e)
+        if isinstance(e, httpx.HTTPError) and hasattr(e, "response") and e.response is not None:
+             logger.warning("Anthropic API Error body: %s", e.response.text)
         return ""
-
-    for i, page in enumerate(doc):
-        try:
-            scale = 200 / 72
-            bitmap = page.render(scale=scale, rotation=0)
-            pil_image = bitmap.to_pil().convert("RGB")
-            
-            img_array = np.array(pil_image)
-            result = ocr.ocr(img_array)
-            
-            if result and result[0]:
-                for line in result[0]:
-                    texts.append(line[1][0])
-            
-            logger.debug("PaddleOCR page %d processed", i + 1)
-        except Exception as e:
-            logger.warning("PaddleOCR failed on page %d: %s", i + 1, e)
-
-    doc.close()
-    return "\n".join(texts)
 
 
 
@@ -237,21 +246,20 @@ async def parse_pdf(content: bytes) -> list[dict]:
 
     # ── 3. OCR fallback (image-based / scanned PDF) ──
     if not rows and not has_any_text:
-        logger.info("PDF appears to be image-based, attempting PaddleOCR extraction")
+        logger.info("PDF appears to be image-based, attempting Anthropic extraction")
         
-        # Run PaddleOCR in a thread since it is blocking CPU-bound work
-        ocr_text = await asyncio.to_thread(_paddleocr_parse_pdf, content)
+        ocr_text = await _anthropic_parse_pdf(content)
         
         if ocr_text.strip():
             # Pass raw OCR text block into the same regex parser
             rows = _parse_text_rows(ocr_text)
             
             if not rows:
-                logger.warning("PaddleOCR extracted text but regex parser found no transactions.")
+                logger.warning("Anthropic extracted text but regex parser found no transactions.")
         else:
             logger.warning(
-                "PDF is image-based and PaddleOCR returned no text. "
-                "Ensure paddleocr is installed and functioning."
+                "PDF is image-based and Anthropic returned no text. "
+                "Ensure ANTHROPIC_API_KEY is configured."
             )
 
     return rows
