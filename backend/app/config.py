@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
 
     # CORS — comma-separated list of allowed origins
-    cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173", "https://leger-iota.vercel.app"]
+    cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173", "https://ledger-beta-two.vercel.app"]
 
     # Rate limiting
     advisor_rate_limit: str = "10/minute"
