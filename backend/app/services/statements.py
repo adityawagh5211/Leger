@@ -125,8 +125,8 @@ def _parse_text_rows(text: str) -> list[dict]:
         if not description:
             description = "Bank transaction"
         lower_rest = rest.lower()
-        is_credit = any(kw in lower_rest for kw in ("by ", "cr ", "credit", "deposit", "salary", "refund"))
-        is_debit = any(kw in lower_rest for kw in ("to ", "dr ", "debit", "withdraw", "paid", "transfer"))
+        is_credit = bool(re.search(r'\b(cr|credit|deposit|dep|salary|refund)\b|/cr/|\\bcr\\b', lower_rest))
+        is_debit = bool(re.search(r'\b(dr|debit|withdraw|paid|wdl|atm|pos|fee|charges?)\b|/dr/|\\bdr\\b', lower_rest))
         try:
             amount = Decimal(amounts[0].replace(",", ""))
         except InvalidOperation:
@@ -156,7 +156,7 @@ async def _gemini_parse_pdf(content: bytes) -> str:
     try:
         import google.generativeai as genai
         genai.configure(api_key=settings.gemini_api_key)
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        model = genai.GenerativeModel("gemini-2.5-flash")
         
         pdf_part = {"mime_type": "application/pdf", "data": content}
         prompt = "You are a financial data extraction assistant. Extract all transaction rows from this bank statement. Maintain the original row structure so regex can parse it. Do not add any extra commentary."

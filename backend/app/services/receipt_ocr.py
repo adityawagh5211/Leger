@@ -39,7 +39,7 @@ async def parse_receipt_image(image_bytes: bytes) -> dict | None:
         import google.generativeai as genai
         genai.configure(api_key=settings.gemini_api_key)
         
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        model = genai.GenerativeModel("gemini-2.5-flash")
         
         image_part = {
             "mime_type": "image/jpeg",

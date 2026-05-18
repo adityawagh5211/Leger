@@ -8,7 +8,14 @@ from .models import User
 from .schemas import UserContext
 
 # ── Supabase Auth Verification ────────────────────────────────────────────────
-# Supabase uses HS256 symmetric signatures by default, not JWKS/RS256.
+# Supabase now uses ES256/RS256 asymmetric signatures for new projects, verified via JWKS.
+from functools import lru_cache
+
+@lru_cache(maxsize=1)
+def _get_supabase_jwks(url: str):
+    response = httpx.get(url, timeout=10.0)
+    response.raise_for_status()
+    return response.json()
 
 
 def _bearer(authorization: str | None) -> str:
@@ -42,13 +49,15 @@ def _verify_token(token: str) -> UserContext:
         try:
             from jose import jwt
 
-            if not settings.supabase_jwt_secret:
-                raise HTTPException(status_code=500, detail="SUPABASE_JWT_SECRET not configured")
+            if not settings.supabase_jwks_url:
+                raise HTTPException(status_code=500, detail="SUPABASE_JWKS_URL not configured")
+            
+            jwks = _get_supabase_jwks(settings.supabase_jwks_url)
 
             decoded = jwt.decode(
                 token,
-                settings.supabase_jwt_secret,
-                algorithms=["HS256"],
+                jwks,
+                algorithms=["ES256", "RS256", "HS256"],
                 options={"verify_aud": False},
             )
             return UserContext(id=decoded["sub"], email=decoded.get("email"))

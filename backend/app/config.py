@@ -9,7 +9,7 @@ class Settings(BaseSettings):
 
     # Auth
     auth_provider: str = "dev"
-    supabase_jwt_secret: str | None = None
+    supabase_jwks_url: str | None = None
     firebase_project_id: str | None = None
 
     # AI Providers (free tiers)
@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
 
     # CORS — comma-separated list of allowed origins
-    cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
+    cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173", "https://leger-iota.vercel.app"]
 
     # Rate limiting
     advisor_rate_limit: str = "10/minute"
