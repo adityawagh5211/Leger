@@ -69,20 +69,19 @@ The app is available at **http://127.0.0.1:5173**.
 2. The app will use `AUTH_PROVIDER=dev` by default (accepts any Bearer token)
 3. Try adding a transaction, setting a budget, or asking the AI advisor
 
-## Optional: Local AI with llama.cpp
+## Optional: Local AI with llama-cpp-python
 
-For offline AI capabilities:
+Ledger natively embeds `llama-cpp-python` for local, offline AI.
+
+1. Download a text GGUF model (e.g., Qwen2.5-1.5B-Instruct).
+2. Set the variables in `backend/.env`:
 
 ```bash
-# Download a text GGUF model (e.g., Qwen2.5-1.5B-Instruct)
-# Run llama.cpp server
-./llama-server -m models/Qwen2.5-1.5B-Instruct-Q4_K_M.gguf \
-  --port 8080 --ctx-size 4096 --n-gpu-layers 35
-
-# Enable in backend/.env
 LLAMA_ENABLED=true
-LLAMA_SERVER_URL=http://127.0.0.1:8080
+LLAMA_MODEL_PATH="C:\absolute\path\to\qwen2.5-1.5b-instruct-q4_k_m.gguf"
 ```
+
+The FastAPI backend will automatically load the model into memory on the first AI request!
 
 ## Troubleshooting
 

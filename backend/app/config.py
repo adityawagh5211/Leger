@@ -15,8 +15,8 @@ class Settings(BaseSettings):
     # AI — Cloud
     anthropic_api_key: str | None = None
 
-    # AI — Local (llama.cpp server)
-    llama_server_url: str = "http://127.0.0.1:8080"
+    # AI — Local (llama.cpp engine)
+    llama_model_path: str = r"C:\Users\ASUS\Downloads\GPT-2_model\models\qwen2.5-1.5b-instruct-q4_k_m.gguf"
     llama_enabled: bool = False
 
     # Redis

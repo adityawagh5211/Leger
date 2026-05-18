@@ -85,77 +85,64 @@ async def parse_receipt_image(image_bytes: bytes) -> dict | None:
 
 
 async def _llm_text_parse(ocr_text: str) -> dict | None:
-    """Call llama.cpp server with a text model (Qwen2.5) to parse OCR text."""
+    """Call internal LlamaEngine with a text model (Qwen2.5) to parse OCR text."""
     prompt = EXTRACTION_PROMPT.format(ocr_text=ocr_text)
 
-    async with httpx.AsyncClient(timeout=30) as client:
-        try:
-            res = await client.post(
-                f"{settings.llama_server_url}/v1/chat/completions",
-                json={
-                    "model": "qwen2.5-1.5b-instruct",
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": prompt,
-                        }
-                    ],
-                    "max_tokens": 300,
-                },
-            )
-            res.raise_for_status()
-            
-            output_text = res.json()["choices"][0]["message"]["content"]
-            
-            # Extract JSON block if surrounded by markdown codeblocks
-            import re
-            json_match = re.search(r'\{.*\}', output_text.replace('\n', ' '), re.DOTALL)
-            if json_match:
-                raw = json_match.group(0)
-            else:
-                raw = output_text
-                
-            data = json.loads(raw)
-
-            # Validate required fields
-            amount = data.get("total_amount")
-            if not amount or float(amount) <= 0:
-                return None
-
-            merchant = data.get("merchant_name", "Unknown")
-            category = data.get("category", "Other")
-            parsed_date = None
-            if data.get("date"):
-                try:
-                    parsed_date = date.fromisoformat(data["date"])
-                except ValueError:
-                    pass
-
-            return {
-                "description": merchant,
-                "amount": Decimal(str(amount)),
-                "category": category
-                if category
-                in [
-                    "Dining",
-                    "Groceries",
-                    "Shopping",
-                    "Health",
-                    "Transport",
-                    "Utilities",
-                    "Entertainment",
-                    "Subscriptions",
-                    "Housing",
-                    "Other",
-                ]
-                else categorize(merchant, "expense"),
-                "date": parsed_date or date.today(),
-                "type": "expense",
-                "source": "receipt",
-                "items": data.get("items", []),
-                "merchant_normalized": merchant,
-                "confidence": 0.8,
-            }
-        except (json.JSONDecodeError, KeyError, httpx.HTTPError) as e:
-            logger.warning("Text parse error: %s", e)
+    from .llama_engine import llama_engine
+    try:
+        output_text = await llama_engine.generate(prompt=prompt, max_tokens=300)
+        if not output_text:
             return None
+
+        # Extract JSON block if surrounded by markdown codeblocks
+        import re
+        json_match = re.search(r'\{.*\}', output_text.replace('\n', ' '), re.DOTALL)
+        if json_match:
+            raw = json_match.group(0)
+        else:
+            raw = output_text
+            
+        data = json.loads(raw)
+
+        # Validate required fields
+        amount = data.get("total_amount")
+        if not amount or float(amount) <= 0:
+            return None
+
+        merchant = data.get("merchant_name", "Unknown")
+        category = data.get("category", "Other")
+        parsed_date = None
+        if data.get("date"):
+            try:
+                parsed_date = date.fromisoformat(data["date"])
+            except ValueError:
+                pass
+
+        return {
+            "description": merchant,
+            "amount": Decimal(str(amount)),
+            "category": category
+            if category
+            in [
+                "Dining",
+                "Groceries",
+                "Shopping",
+                "Health",
+                "Transport",
+                "Utilities",
+                "Entertainment",
+                "Subscriptions",
+                "Housing",
+                "Other",
+            ]
+            else categorize(merchant, "expense"),
+            "date": parsed_date or date.today(),
+            "type": "expense",
+            "source": "receipt",
+            "items": data.get("items", []),
+            "merchant_normalized": merchant,
+            "confidence": 0.8,
+        }
+    except (json.JSONDecodeError, KeyError) as e:
+        logger.warning("Text parse error: %s", e)
+        return None

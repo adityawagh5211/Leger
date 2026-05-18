@@ -27,8 +27,8 @@ For operations that need language understanding:
 
 | Setting | Value |
 |---|---|
-| Server | `llama-server` (llama.cpp) |
-| URL | `LLAMA_SERVER_URL` (default: `http://127.0.0.1:8080`) |
+| Engine | Embedded `llama-cpp-python` |
+| Path | `LLAMA_MODEL_PATH` |
 | Text Model | Qwen2.5-1.5B-Instruct Q4_K_M |
 | VRAM | ~1.5GB for 1.5B model |
 

@@ -105,16 +105,16 @@ npm run dev
 
 App is live at **http://127.0.0.1:5173** — backend API at **http://127.0.0.1:8000/docs**.
 
-### 4. (Optional) Local AI with llama.cpp
+### 4. (Optional) Local AI
+
+Ledger natively embeds `llama-cpp-python` for local, offline AI (no external server required!).
+
+1. Download a text GGUF model (e.g., Qwen2.5-1.5B-Instruct).
+2. Set the variables in `backend/.env`:
 
 ```bash
-# Download and run llama.cpp server with the Qwen2.5-1.5B text model
-./llama-server -m models/Qwen2.5-1.5B-Instruct-Q4_K_M.gguf \
-  --port 8080 --ctx-size 4096 --n-gpu-layers 35
-
-# Enable in backend/.env
 LLAMA_ENABLED=true
-LLAMA_SERVER_URL=http://127.0.0.1:8080
+LLAMA_MODEL_PATH="C:\absolute\path\to\qwen2.5-1.5b-instruct-q4_k_m.gguf"
 ```
 
 ## Environment Variables
@@ -126,8 +126,8 @@ LLAMA_SERVER_URL=http://127.0.0.1:8080
 | `ENVIRONMENT` | No | `development` | `development`, `staging`, or `production` |
 | `CORS_ORIGINS` | No | `http://localhost:5173` | Comma-separated allowed origins |
 | `ANTHROPIC_API_KEY` | No | — | Anthropic API key for cloud AI |
-| `LLAMA_ENABLED` | No | `false` | Enable local llama.cpp inference |
-| `LLAMA_SERVER_URL` | No | `http://127.0.0.1:8080` | llama.cpp server endpoint |
+| `LLAMA_ENABLED` | No | `false` | Enable local llama-cpp-python inference |
+| `LLAMA_MODEL_PATH` | No | `models/qwen2...` | Path to your local GGUF model file |
 | `SUPABASE_JWKS_URL` | If Supabase | — | Supabase JWKS URL for JWT verification |
 | `FIREBASE_PROJECT_ID` | If Firebase | — | Firebase project ID for JWT verification |
 | `REDIS_URL` | No | `redis://localhost:6379/0` | Redis URL for caching |

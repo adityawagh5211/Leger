@@ -11,18 +11,17 @@ import httpx
 from ..config import settings
 
 
+from .llama_engine import llama_engine
+
 class LocalAdapter:
-    """Calls llama-server (llama.cpp) OpenAI-compatible endpoint."""
+    """Calls embedded llama-cpp-python engine."""
 
     async def is_available(self) -> bool:
         if not settings.llama_enabled:
             return False
-        try:
-            async with httpx.AsyncClient(timeout=2) as client:
-                r = await client.get(f"{settings.llama_server_url}/health")
-                return r.status_code == 200
-        except Exception:
-            return False
+        # Lazy load check
+        model = await llama_engine._get_model()
+        return model is not None
 
     async def stream(
         self,
@@ -30,33 +29,8 @@ class LocalAdapter:
         messages: list[dict],
         max_tokens: int = 512,
     ) -> AsyncIterator[str]:
-        payload = {
-            "model": "local",
-            "messages": [{"role": "system", "content": system}, *messages],
-            "max_tokens": max_tokens,
-            "temperature": 0.3,
-            "stream": True,
-        }
-        async with httpx.AsyncClient(timeout=120) as client:
-            async with client.stream(
-                "POST",
-                f"{settings.llama_server_url}/v1/chat/completions",
-                json=payload,
-            ) as response:
-                response.raise_for_status()
-                async for line in response.aiter_lines():
-                    if not line.startswith("data: "):
-                        continue
-                    data = line[6:]
-                    if data == "[DONE]":
-                        return
-                    try:
-                        chunk = json.loads(data)
-                        token = chunk["choices"][0]["delta"].get("content", "")
-                        if token:
-                            yield token
-                    except (json.JSONDecodeError, KeyError):
-                        continue
+        async for chunk in llama_engine.stream(system, messages, max_tokens):
+            yield chunk
 
 
 class AnthropicAdapter:
