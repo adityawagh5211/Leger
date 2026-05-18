@@ -1,6 +1,6 @@
 """
 Receipt OCR — extract transaction data from receipt images.
-Uses LLM vision (if llava is running) or falls back to basic regex extraction.
+Uses LLM vision (if Qwen2-VL is running) or falls back to basic regex extraction.
 """
 
 import base64
@@ -46,7 +46,7 @@ async def parse_receipt_image(image_bytes: bytes) -> dict | None:
 
 
 async def _llm_vision_parse(image_bytes: bytes) -> dict | None:
-    """Call llama.cpp server with a multimodal model (llava)."""
+    """Call llama.cpp server with a multimodal model (qwen2-vl)."""
     b64 = base64.b64encode(image_bytes).decode()
 
     async with httpx.AsyncClient(timeout=30) as client:
@@ -54,7 +54,7 @@ async def _llm_vision_parse(image_bytes: bytes) -> dict | None:
             res = await client.post(
                 f"{settings.llama_server_url}/v1/chat/completions",
                 json={
-                    "model": "llava",
+                    "model": "qwen2-vl",
                     "messages": [
                         {
                             "role": "user",

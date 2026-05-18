@@ -349,7 +349,7 @@ async def import_statement(
             if ext == "csv":
                 rows = parse_csv(content)
             else:
-                rows = parse_pdf(content)
+                rows = await parse_pdf(content)
 
             saved_count = 0
             for row in rows:
@@ -371,8 +371,18 @@ async def import_statement(
                     saved_count += 1
 
             db.commit()
-            job.status = "done"
-            job.row_count = saved_count
+            if not rows:
+                job.status = "failed"
+                job.error_message = (
+                    "No transactions could be extracted from this file. "
+                    "If this is a scanned/image PDF, install Tesseract OCR on your system "
+                    "(https://github.com/UB-Mannheim/tesseract/wiki) for OCR support. "
+                    "Alternatively, export a digital/text-layer PDF or CSV from your bank."
+                )
+            else:
+                job.status = "done"
+                job.row_count = saved_count
+
         except Exception as e:
             job.status = "failed"
             job.error_message = str(e)[:500]

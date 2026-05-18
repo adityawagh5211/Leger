@@ -27,11 +27,10 @@ For operations that need language understanding:
 
 | Setting | Value |
 |---|---|
-| Server | `llama.cpp` HTTP server |
+| Server | `llama-qwen2vl-cli` (llama.cpp) |
 | URL | `LLAMA_SERVER_URL` (default: `http://127.0.0.1:8080`) |
-| Text Model | Mistral 7B Instruct Q4_K_M |
-| Vision Model | Llava 1.6 (for receipt OCR) |
-| VRAM | ~6GB for 7B model |
+| Multimodal Model | Qwen2-VL-2B-Instruct Q4_K_M + mmproj |
+| VRAM | ~2.5GB for 2B model |
 
 **Activation:** Set `LLAMA_ENABLED=true` in `.env`
 
@@ -86,7 +85,7 @@ Generates 4 insight types from spending data:
 
 ### Receipt OCR (`services/receipt_ocr.py`)
 
-Uses multimodal vision model (Llava-compatible):
+Uses multimodal vision model (Qwen2-VL-compatible):
 1. Accepts base64 image
 2. Extracts: merchant, amount, date, items, category
 3. Returns structured `ReceiptResult` schema

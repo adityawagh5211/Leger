@@ -49,7 +49,7 @@ and get AI-powered financial insights — all with local-first privacy.
 ┌──────────────┐  ┌─────────────────────┐  ┌────────────────────┐
 │  PostgreSQL  │  │  llama.cpp server   │  │  Anthropic API     │
 │  (SQLAlchemy)│  │  (local inference)  │  │  (cloud fallback)  │
-│              │  │  Mistral 7B / Llava │  │  Claude 3.5 Sonnet │
+│              │  │  Qwen2-VL-2B-Instr  │  │  Claude 3.5 Sonnet │
 └──────────────┘  └─────────────────────┘  └────────────────────┘
 ```
 
@@ -108,8 +108,9 @@ App is live at **http://127.0.0.1:5173** — backend API at **http://127.0.0.1:8
 ### 4. (Optional) Local AI with llama.cpp
 
 ```bash
-# Download and run llama.cpp server with a GGUF model
-./llama-server -m models/mistral-7b-instruct-v0.3.Q4_K_M.gguf \
+# Download and run llama.cpp server with the multimodal Qwen2-VL-2B GGUF model
+./llama-qwen2vl-cli -m models/Qwen2-VL-2B-Instruct-Q4_K_M.gguf \
+  --mmproj models/mmproj-Qwen2-VL-2B-Instruct-f32.gguf \
   --port 8080 --ctx-size 4096 --n-gpu-layers 35
 
 # Enable in backend/.env

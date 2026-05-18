@@ -33,8 +33,8 @@ Request → Rule Engine → Local LLM (llama.cpp) → Cloud LLM (Anthropic) → 
 - Budget threshold alerts are computed mathematically
 
 ### Layer 2: Local LLM via llama.cpp (Low Latency, Zero Cost)
-- Served via `llama.cpp` HTTP server on `http://127.0.0.1:8080`
-- Models: Mistral 7B Q4 for text, Llava 1.6 for vision (receipt OCR)
+- Served via `llama-qwen2vl-cli` HTTP server on `http://127.0.0.1:8080`
+- Models: Qwen2-VL-2B-Instruct Q4_K_M for both text and vision (receipt OCR)
 - JSON-constrained output via system prompts to avoid parsing failures
 - Toggle: `LLAMA_ENABLED=true` + `LLAMA_SERVER_URL`
 
@@ -85,14 +85,14 @@ Each AI service follows the same pattern:
 - **Privacy by default** — data stays local unless cloud fallback is explicitly enabled
 
 ### Negative
-- **Hardware requirements**: llama.cpp needs ~6GB VRAM for 7B model + vision
-- **Model quality**: Local 7B models are less capable than Claude 3.5 for complex reasoning
+- **Hardware requirements**: llama.cpp needs ~2.5GB VRAM for the 2B multimodal model
+- **Model quality**: Local 2B models are less capable than Claude 3.5 for complex reasoning
 - **Operational complexity**: Two inference stacks to maintain (local + cloud)
 
 ### Risks
 - Local model quality may degrade for non-English or mixed-language descriptions
 - Anthropic API pricing or terms may change, requiring provider switch
-- Vision model (Llava) accuracy on low-quality receipt photos is unproven at scale
+- Vision model (Qwen2-VL) accuracy on low-quality receipt photos requires validation
 
 ## Alternatives Considered
 
