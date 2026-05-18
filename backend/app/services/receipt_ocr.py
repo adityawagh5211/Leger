@@ -42,7 +42,8 @@ def _paddleocr_extract(image_bytes: bytes) -> str:
         return ""
 
     try:
-        ocr = PaddleOCR(use_angle_cls=False, lang="en", show_log=False)
+        logging.getLogger("ppocr").setLevel(logging.WARNING)
+        ocr = PaddleOCR(use_angle_cls=False, lang="en")
         pil_image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
         img_array = np.array(pil_image)
         

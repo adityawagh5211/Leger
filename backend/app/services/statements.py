@@ -171,7 +171,8 @@ def _paddleocr_parse_pdf(content: bytes) -> str:
 
     try:
         # Initialize OCR once (downloads models if first run)
-        ocr = PaddleOCR(use_angle_cls=False, lang="en", show_log=False)
+        logging.getLogger("ppocr").setLevel(logging.WARNING)
+        ocr = PaddleOCR(use_angle_cls=False, lang="en")
     except Exception as e:
         logger.warning("Failed to initialize PaddleOCR: %s", e)
         return ""
