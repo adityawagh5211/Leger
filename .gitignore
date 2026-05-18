@@ -18,6 +18,9 @@ frontend/.vite/
 .env
 .env.local
 .env.*.local
+*.env
+backend/.env
+frontend/.env
 
 # IDE
 .vscode/

@@ -9,12 +9,13 @@ class Settings(BaseSettings):
 
     # Auth
     auth_provider: str = "dev"
-    supabase_jwks_url: str | None = None
+    supabase_jwt_secret: str | None = None
     firebase_project_id: str | None = None
 
     # AI Providers (free tiers)
     groq_api_key: str | None = None
     gemini_api_key: str | None = None
+    cohere_api_key: str | None = None
     cerebras_api_key: str | None = None
     openrouter_api_key: str | None = None
     mistral_api_key: str | None = None
@@ -56,6 +57,7 @@ class Settings(BaseSettings):
                 self.groq_api_key, 
                 self.cerebras_api_key, 
                 self.gemini_api_key, 
+                self.cohere_api_key,
                 self.openrouter_api_key
             ]):
                 print(

@@ -1,4 +1,7 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
+import { supabase } from "./supabase";
+import { setAuthToken } from "./lib";
+import Auth from "./views/Auth";
 import Dashboard from "./views/Dashboard";
 import Transactions from "./views/Transactions";
 import Budgets from "./views/Budgets";
@@ -11,7 +14,7 @@ import CreditBenchmarks from "./views/CreditBenchmarks";
 import CommandPalette from "./components/CommandPalette";
 import {
   LayoutDashboard, Plus, Target, BarChart3, Sparkles,
-  Wallet, Download, Shield, Command, Briefcase, Gauge,
+  Wallet, Download, Shield, Command, Briefcase, Gauge, LogOut, Loader2
 } from "lucide-react";
 
 const VIEWS = [
@@ -28,8 +31,29 @@ const VIEWS = [
 ];
 
 export default function App() {
-  const [view, setView] = React.useState("dashboard");
-  const [cmdOpen, setCmdOpen] = React.useState(false);
+  const [view, setView] = useState("dashboard");
+  const [cmdOpen, setCmdOpen] = useState(false);
+  const [session, setSession] = useState(null);
+  const [loadingAuth, setLoadingAuth] = useState(true);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setAuthToken(session?.access_token || null);
+      setLoadingAuth(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      setAuthToken(session?.access_token || null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+  };
 
   const renderView = () => {
     switch (view) {
@@ -50,6 +74,18 @@ export default function App() {
   function handleCmdClose(action) {
     if (action === "toggle") setCmdOpen(p => !p);
     else setCmdOpen(false);
+  }
+
+  if (loadingAuth) {
+    return (
+      <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center' }}>
+        <Loader2 size={32} className="spin text-secondary" />
+      </div>
+    );
+  }
+
+  if (!session) {
+    return <Auth />;
   }
 
   return (
@@ -91,6 +127,14 @@ export default function App() {
             >
               <Command size={14} />
               <kbd className="cmd-kbd-nav">⌘K</kbd>
+            </button>
+            <button
+              className="nav-tab"
+              onClick={handleSignOut}
+              title="Sign Out"
+            >
+              <LogOut size={14} />
+              Sign Out
             </button>
           </nav>
         </div>

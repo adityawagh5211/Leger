@@ -1,9 +1,31 @@
+import json
 import asyncio
 import base64
 import hashlib
 import logging
 import sys
 from datetime import date
+
+class SimpleLRUCache:
+    def __init__(self, maxsize=256):
+        self.cache = {}
+        self.maxsize = maxsize
+        
+    def get(self, key):
+        if key in self.cache:
+            val = self.cache.pop(key)
+            self.cache[key] = val
+            return val
+        return None
+        
+    def put(self, key, value):
+        if key in self.cache:
+            self.cache.pop(key)
+        self.cache[key] = value
+        if len(self.cache) > self.maxsize:
+            self.cache.pop(next(iter(self.cache)))
+
+llm_cache = SimpleLRUCache(256)
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -456,6 +478,34 @@ async def advisor_stream(
     db.add(user_msg)
     db.commit()
 
+    # Simple hashing of the complete message context
+    cache_key = hashlib.sha256(json.dumps(messages).encode()).hexdigest()
+    cached_reply = llm_cache.get(cache_key)
+
+    if cached_reply:
+        logger.info("Cache hit for advisor stream.")
+        async def cached_event_generator():
+            # Yield cached string fully
+            yield f"data: {cached_reply}\n\n"
+            
+            assistant_msg = AIMessage(
+                conversation_id=conversation.id,
+                role="assistant",
+                content=cached_reply,
+            )
+            db.add(assistant_msg)
+            db.commit()
+            yield "data: [DONE]\n\n"
+
+        return StreamingResponse(
+            cached_event_generator(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Conversation-Id": conversation.id,
+            },
+        )
+
     async def event_generator():
         full_reply = []
         try:
@@ -469,6 +519,8 @@ async def advisor_stream(
             # Persist assistant reply
             if full_reply:
                 reply_text = "".join(full_reply)
+                llm_cache.put(cache_key, reply_text)
+                
                 assistant_msg = AIMessage(
                     conversation_id=conversation.id,
                     role="assistant",

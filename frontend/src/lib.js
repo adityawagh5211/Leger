@@ -1,9 +1,13 @@
 // ── API Base & helpers ────────────────────────────────────────────────────────
 export const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
-const DEV_TOKEN = import.meta.env.VITE_DEV_AUTH_TOKEN || "dev-user";
+let currentToken = import.meta.env.VITE_DEV_AUTH_TOKEN || "dev-user";
+
+export function setAuthToken(token) {
+  currentToken = token;
+}
 
 function getToken() {
-  return localStorage.getItem("ledger_token") || DEV_TOKEN;
+  return currentToken;
 }
 
 export async function apiFetch(path, opts = {}) {

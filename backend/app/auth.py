@@ -7,24 +7,8 @@ from .db import get_db
 from .models import User
 from .schemas import UserContext
 
-# ── JWKS cache (in-process for now; Redis in Phase 2) ───────────────────────
-_jwks_cache: dict | None = None
-
-
-def _get_jwks_sync() -> dict:
-    """Fetch Supabase JWKS. Cached in module-level var after first call."""
-    global _jwks_cache
-    if _jwks_cache:
-        return _jwks_cache
-    if not settings.supabase_jwks_url:
-        raise HTTPException(status_code=500, detail="SUPABASE_JWKS_URL not configured")
-    try:
-        resp = httpx.get(settings.supabase_jwks_url, timeout=10)
-        resp.raise_for_status()
-        _jwks_cache = resp.json()
-        return _jwks_cache
-    except httpx.HTTPError as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch JWKS: {e}")
+# ── Supabase Auth Verification ────────────────────────────────────────────────
+# Supabase uses HS256 symmetric signatures by default, not JWKS/RS256.
 
 
 def _bearer(authorization: str | None) -> str:
@@ -58,11 +42,13 @@ def _verify_token(token: str) -> UserContext:
         try:
             from jose import jwt
 
-            jwks = _get_jwks_sync()
+            if not settings.supabase_jwt_secret:
+                raise HTTPException(status_code=500, detail="SUPABASE_JWT_SECRET not configured")
+
             decoded = jwt.decode(
                 token,
-                jwks,
-                algorithms=["RS256"],
+                settings.supabase_jwt_secret,
+                algorithms=["HS256"],
                 options={"verify_aud": False},
             )
             return UserContext(id=decoded["sub"], email=decoded.get("email"))

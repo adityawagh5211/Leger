@@ -84,6 +84,35 @@ class GeminiAdapter:
             if chunk.text:
                 yield chunk.text
 
+class CohereAdapter:
+    """Calls Cohere API."""
+    async def is_available(self) -> bool:
+        return bool(settings.cohere_api_key)
+
+    async def stream(self, system: str, messages: list[dict], max_tokens: int) -> AsyncIterator[str]:
+        import cohere
+        client = cohere.AsyncClient(api_key=settings.cohere_api_key)
+        
+        chat_history = []
+        message = ""
+        for msg in messages:
+            if msg["role"] == "user":
+                message = msg["content"]
+            else:
+                chat_history.append({"role": "USER" if msg["role"] == "user" else "CHATBOT", "message": msg["content"]})
+                
+        response = await client.chat_stream(
+            message=message,
+            preamble=system,
+            chat_history=chat_history,
+            max_tokens=max_tokens,
+            model="command-r-plus-08-2024" # Cohere's free tier model
+        )
+        
+        async for event in response:
+            if event.event_type == "text-generation":
+                yield event.text
+
 class OpenRouterAdapter:
     """Calls OpenRouter API using OpenAI compatible SDK."""
     async def is_available(self) -> bool:
@@ -118,6 +147,7 @@ class AIRouter:
             ("Groq", GroqAdapter()),
             ("Cerebras", CerebrasAdapter()),
             ("Gemini", GeminiAdapter()),
+            ("Cohere", CohereAdapter()),
             ("OpenRouter", OpenRouterAdapter())
         ]
 

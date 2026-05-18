@@ -646,3 +646,25 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .portfolio-card:hover { border-color: var(--accent); }
 .portfolio-card.selected { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(59,130,246,0.12); }
 .portfolio-card-top { display: flex; justify-content: space-between; align-items: center; }
+
+/* ── Auth View ───────────────────────────────── */
+.auth-container { display: flex; align-items: center; justify-content: center; height: 100vh; background: var(--bg); padding: 20px; }
+.auth-card { width: 100%; max-width: 400px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 32px 28px; box-shadow: 0 8px 30px rgba(0,0,0,0.04); }
+.glass-panel { background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(16px); }
+.auth-header { text-align: center; margin-bottom: 24px; }
+.auth-logo { margin: 0 auto 16px auto; }
+.auth-header h2 { font-size: 22px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; }
+.auth-alert { padding: 12px 14px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 500; margin-bottom: 20px; text-align: center; }
+.auth-alert.error { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+.auth-alert.success { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+.auth-form { display: flex; flex-direction: column; gap: 16px; }
+.form-group label { display: block; font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px; }
+.input-with-icon { position: relative; }
+.input-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted); }
+.input-with-icon input { padding-left: 38px; }
+.full-width { width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.auth-footer { margin-top: 24px; text-align: center; }
+.btn-link { background: none; border: none; color: var(--text-secondary); font-size: 13px; font-weight: 500; cursor: pointer; transition: color 0.15s; }
+.btn-link:hover { color: var(--text-primary); }
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { 100% { transform: rotate(360deg); } }

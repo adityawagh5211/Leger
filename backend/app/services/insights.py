@@ -5,10 +5,7 @@ from decimal import Decimal
 from ..models import Budget, Transaction
 from .categorizer import EXPENSE_CATEGORIES
 
-SYSTEM_PROMPT = """You are Ledger AI, a sharp and practical personal finance advisor for Indian users.
-You give concise, actionable advice grounded strictly in the user's real financial data.
-Use plain English. Be direct but encouraging. Keep responses under 200 words.
-Always ground your advice in the specific numbers provided. Format with short paragraphs."""
+SYSTEM_PROMPT = "You are a concise finance assistant for Indian users. Answer in ≤3 sentences. Always ground your advice in the specific numbers provided."
 
 
 def monthly_summary(transactions: list[Transaction]) -> dict:
