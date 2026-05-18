@@ -9,8 +9,7 @@ logging.getLogger("pdfminer").setLevel(logging.WARNING)
 from app.services.statements import parse_pdf
 
 async def main():
-    print("Loading page of AS.pdf and running LLM Vision extraction...")
-    print("If this is the first run, the Qwen2-VL model (~4GB) will be downloaded automatically.")
+    print("Loading page of AS.pdf and sending to local llama-qwen2vl-cli server...")
     with open(r"C:\Users\ASUS\Downloads\Ledger\AS.pdf", "rb") as f:
         content = f.read()
 

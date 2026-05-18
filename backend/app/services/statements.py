@@ -19,7 +19,10 @@ from io import BytesIO, StringIO
 
 import pandas as pd
 import pdfplumber
+import httpx
+import base64
 
+from ..config import settings
 from .categorizer import categorize
 
 logger = logging.getLogger("ledger.statements")
@@ -146,43 +149,19 @@ def _parse_text_rows(text: str) -> list[dict]:
 
 # ── Local LLM Vision pipeline for scanned/image PDFs ─────────────────────────
 
-_qwen_processor = None
-_qwen_model = None
-
-def _get_qwen_model():
-    """Lazy-load Qwen2-VL model and processor."""
-    global _qwen_processor, _qwen_model
-    if _qwen_model is None:
-        try:
-            from transformers import Qwen2VLForConditionalGeneration, AutoProcessor
-            import torch
-            logger.info("Downloading/Loading Qwen2-VL-2B-Instruct model (this may take a while on first run)...")
-            model_id = "Qwen/Qwen2-VL-2B-Instruct"
-            _qwen_model = Qwen2VLForConditionalGeneration.from_pretrained(
-                model_id, torch_dtype="auto", device_map="auto"
-            )
-            _qwen_processor = AutoProcessor.from_pretrained(model_id)
-            logger.info("Qwen2-VL model loaded successfully.")
-        except ImportError:
-            logger.warning("transformers or qwen-vl-utils not installed — run: pip install transformers qwen-vl-utils accelerate")
-    return _qwen_processor, _qwen_model
-
 async def _llm_vision_parse_pdf(content: bytes) -> str:
     """
-    Render PDF pages to images and use Qwen2-VL to extract transaction tables.
+    Render PDF pages to images and use llama.cpp server to extract transaction tables.
     Returns concatenated JSON array output from the model.
     """
-    processor, model = _get_qwen_model()
-    if model is None:
+    if not settings.llama_enabled:
         return ""
-
+        
     try:
         import pypdfium2 as pdfium
-        from PIL import Image
-        import torch
-        from qwen_vl_utils import process_vision_info
+        from io import BytesIO
     except ImportError:
-        logger.warning("Required image processing libraries not available.")
+        logger.warning("Required image/pdf processing libraries not available.")
         return ""
 
     texts: list[str] = []
@@ -192,63 +171,54 @@ async def _llm_vision_parse_pdf(content: bytes) -> str:
         logger.warning("pypdfium2 failed to open PDF: %s", e)
         return ""
 
-    for i, page in enumerate(doc):
-        try:
-            scale = 200 / 72
-            bitmap = page.render(scale=scale, rotation=0)
-            pil_image = bitmap.to_pil()
-
-            messages = [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "image", "image": pil_image},
-                        {
-                            "type": "text", 
-                            "text": "Extract the bank transactions from this image into a JSON list. "
-                                    "Each object must have: date (YYYY-MM-DD), description, amount (absolute number without commas), type (income or expense). "
-                                    "If there are no transactions, return an empty array []. Return ONLY valid JSON."
-                        },
-                    ],
-                }
-            ]
-
-            text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-            image_inputs, video_inputs = process_vision_info(messages)
-            
-            inputs = processor(
-                text=[text],
-                images=image_inputs,
-                videos=video_inputs,
-                padding=True,
-                return_tensors="pt"
-            ).to(model.device)
-
-            def _generate():
-                return model.generate(**inputs, max_new_tokens=1024)
+    async with httpx.AsyncClient(timeout=60) as client:
+        for i, page in enumerate(doc):
+            try:
+                scale = 200 / 72
+                bitmap = page.render(scale=scale, rotation=0)
+                pil_image = bitmap.to_pil()
                 
-            generated_ids = await asyncio.to_thread(_generate)
-            
-            generated_ids_trimmed = [
-                out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
-            ]
-            
-            output_text = processor.batch_decode(
-                generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
-            )[0]
-            
-            json_match = re.search(r'\[.*\]', output_text.replace('\n', ' '), re.DOTALL)
-            if json_match:
-                texts.append(json_match.group(0))
-            else:
-                texts.append(output_text)
+                buf = BytesIO()
+                pil_image.save(buf, format="JPEG")
+                b64 = base64.b64encode(buf.getvalue()).decode()
+
+                res = await client.post(
+                    f"{settings.llama_server_url}/v1/chat/completions",
+                    json={
+                        "model": "qwen2-vl",
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": [
+                                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
+                                    {
+                                        "type": "text", 
+                                        "text": "Extract the bank transactions from this image into a JSON list. "
+                                                "Each object must have: date (YYYY-MM-DD), description, amount (absolute number without commas), type (income or expense). "
+                                                "If there are no transactions, return an empty array []. Return ONLY valid JSON."
+                                    },
+                                ],
+                            }
+                        ],
+                        "max_tokens": 1024,
+                    },
+                )
+                res.raise_for_status()
+                output_text = res.json()["choices"][0]["message"]["content"]
                 
-            logger.debug("Qwen2-VL page %d processed", i + 1)
-        except Exception as e:
-            logger.warning("LLM Vision failed on page %d: %s", i + 1, e)
+                json_match = re.search(r'\[.*\]', output_text.replace('\n', ' '), re.DOTALL)
+                if json_match:
+                    texts.append(json_match.group(0))
+                else:
+                    texts.append(output_text)
+                    
+                logger.debug("llama.cpp vision page %d processed", i + 1)
+            except Exception as e:
+                logger.warning("llama.cpp Vision failed on page %d: %s", i + 1, e)
 
     doc.close()
     return "\n".join(texts)
+
 
 
 # ── Public parsers ────────────────────────────────────────────────────────────
