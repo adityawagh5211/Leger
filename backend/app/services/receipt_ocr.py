@@ -1,6 +1,6 @@
 """
 Receipt OCR — extract transaction data from receipt images.
-Uses LLM vision (if Qwen2-VL is running) or falls back to basic regex extraction.
+Uses PaddleOCR for text extraction and a local text LLM for semantic structuring.
 """
 
 import base64
@@ -8,6 +8,7 @@ import json
 import logging
 from datetime import date
 from decimal import Decimal
+import asyncio
 
 import httpx
 
@@ -16,59 +17,103 @@ from .categorizer import categorize
 
 logger = logging.getLogger("ledger.receipt")
 
-VISION_PROMPT = """Extract from this receipt image:
+EXTRACTION_PROMPT = """Extract from this receipt text:
 - merchant_name: string
 - date: YYYY-MM-DD (if visible, else null)
 - total_amount: number (the total/grand total)
 - items: list of {name: string, price: number} (top 5 items max)
 - category: one of [Dining, Groceries, Shopping, Health, Transport, Utilities, Entertainment, Subscriptions, Housing, Other]
 
-Return ONLY valid JSON. No explanation."""
+Return ONLY valid JSON. No explanation.
+
+RECEIPT TEXT:
+{ocr_text}"""
+
+
+def _paddleocr_extract(image_bytes: bytes) -> str:
+    """Extract raw text from receipt image using PaddleOCR."""
+    try:
+        from paddleocr import PaddleOCR
+        import numpy as np
+        from PIL import Image
+        import io
+    except ImportError:
+        logger.warning("Required image processing libraries (paddleocr) not available.")
+        return ""
+
+    try:
+        ocr = PaddleOCR(use_angle_cls=False, lang="en", show_log=False)
+        pil_image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        img_array = np.array(pil_image)
+        
+        result = ocr.ocr(img_array, cls=False)
+        texts = []
+        if result and result[0]:
+            for line in result[0]:
+                texts.append(line[1][0])
+                
+        return "\n".join(texts)
+    except Exception as e:
+        logger.warning("PaddleOCR extraction failed: %s", e)
+        return ""
 
 
 async def parse_receipt_image(image_bytes: bytes) -> dict | None:
     """
     Parse a receipt image into structured transaction data.
-    Tries LLM vision first, then falls back to basic regex on any embedded text.
+    Uses PaddleOCR to extract text, then a text LLM to structure it.
     """
-    # Try LLM vision if llama server is available
+    logger.info("Attempting PaddleOCR extraction for receipt...")
+    ocr_text = await asyncio.to_thread(_paddleocr_extract, image_bytes)
+    
+    if not ocr_text.strip():
+        logger.warning("PaddleOCR returned no text for receipt.")
+        return None
+
     if settings.llama_enabled:
         try:
-            result = await _llm_vision_parse(image_bytes)
+            result = await _llm_text_parse(ocr_text)
             if result:
                 return result
         except Exception as e:
-            logger.warning("LLM vision parse failed: %s", e)
+            logger.warning("LLM text parse failed: %s", e)
 
-    # Fallback: return None — no OCR library dependency
-    logger.info("Receipt parsing unavailable — no vision model configured")
+    # Fallback: No LLM configured or LLM failed
+    logger.info("Receipt parsing LLM unavailable — returning basic OCR text")
     return None
 
 
-async def _llm_vision_parse(image_bytes: bytes) -> dict | None:
-    """Call llama.cpp server with a multimodal model (qwen2-vl)."""
-    b64 = base64.b64encode(image_bytes).decode()
+async def _llm_text_parse(ocr_text: str) -> dict | None:
+    """Call llama.cpp server with a text model (Qwen2.5) to parse OCR text."""
+    prompt = EXTRACTION_PROMPT.format(ocr_text=ocr_text)
 
     async with httpx.AsyncClient(timeout=30) as client:
         try:
             res = await client.post(
                 f"{settings.llama_server_url}/v1/chat/completions",
                 json={
-                    "model": "qwen2-vl",
+                    "model": "qwen2.5-1.5b-instruct",
                     "messages": [
                         {
                             "role": "user",
-                            "content": [
-                                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
-                                {"type": "text", "text": VISION_PROMPT},
-                            ],
+                            "content": prompt,
                         }
                     ],
                     "max_tokens": 300,
                 },
             )
             res.raise_for_status()
-            raw = res.json()["choices"][0]["message"]["content"]
+            
+            output_text = res.json()["choices"][0]["message"]["content"]
+            
+            # Extract JSON block if surrounded by markdown codeblocks
+            import re
+            json_match = re.search(r'\{.*\}', output_text.replace('\n', ' '), re.DOTALL)
+            if json_match:
+                raw = json_match.group(0)
+            else:
+                raw = output_text
+                
             data = json.loads(raw)
 
             # Validate required fields
@@ -111,5 +156,5 @@ async def _llm_vision_parse(image_bytes: bytes) -> dict | None:
                 "confidence": 0.8,
             }
         except (json.JSONDecodeError, KeyError, httpx.HTTPError) as e:
-            logger.warning("Vision parse error: %s", e)
+            logger.warning("Text parse error: %s", e)
             return None

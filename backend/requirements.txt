@@ -10,7 +10,7 @@ python-jose[cryptography]==3.3.0
 httpx==0.28.1
 firebase-admin==6.6.0
 slowapi==0.1.9
-transformers>=4.40.0
-qwen-vl-utils>=0.0.8
-accelerate>=0.30.0
+# OCR Fallback dependencies
+paddleocr>=2.9.1
+paddlepaddle>=2.6.2
 pypdfium2>=4.30.0

@@ -147,21 +147,19 @@ def _parse_text_rows(text: str) -> list[dict]:
     return rows
 
 
-# ── Local LLM Vision pipeline for scanned/image PDFs ─────────────────────────
+# ── OCR pipeline for scanned/image PDFs ─────────────────────────
 
-async def _llm_vision_parse_pdf(content: bytes) -> str:
+def _paddleocr_parse_pdf(content: bytes) -> str:
     """
-    Render PDF pages to images and use llama.cpp server to extract transaction tables.
-    Returns concatenated JSON array output from the model.
+    Render PDF pages to images and use PaddleOCR to extract text blocks.
+    Returns concatenated raw text for the regex parser.
     """
-    if not settings.llama_enabled:
-        return ""
-        
     try:
         import pypdfium2 as pdfium
-        from io import BytesIO
+        from paddleocr import PaddleOCR
+        import numpy as np
     except ImportError:
-        logger.warning("Required image/pdf processing libraries not available.")
+        logger.warning("Required image/pdf processing libraries (paddleocr) not available.")
         return ""
 
     texts: list[str] = []
@@ -171,50 +169,29 @@ async def _llm_vision_parse_pdf(content: bytes) -> str:
         logger.warning("pypdfium2 failed to open PDF: %s", e)
         return ""
 
-    async with httpx.AsyncClient(timeout=60) as client:
-        for i, page in enumerate(doc):
-            try:
-                scale = 200 / 72
-                bitmap = page.render(scale=scale, rotation=0)
-                pil_image = bitmap.to_pil()
-                
-                buf = BytesIO()
-                pil_image.save(buf, format="JPEG")
-                b64 = base64.b64encode(buf.getvalue()).decode()
+    try:
+        # Initialize OCR once (downloads models if first run)
+        ocr = PaddleOCR(use_angle_cls=False, lang="en", show_log=False)
+    except Exception as e:
+        logger.warning("Failed to initialize PaddleOCR: %s", e)
+        return ""
 
-                res = await client.post(
-                    f"{settings.llama_server_url}/v1/chat/completions",
-                    json={
-                        "model": "qwen2-vl",
-                        "messages": [
-                            {
-                                "role": "user",
-                                "content": [
-                                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
-                                    {
-                                        "type": "text", 
-                                        "text": "Extract the bank transactions from this image into a JSON list. "
-                                                "Each object must have: date (YYYY-MM-DD), description, amount (absolute number without commas), type (income or expense). "
-                                                "If there are no transactions, return an empty array []. Return ONLY valid JSON."
-                                    },
-                                ],
-                            }
-                        ],
-                        "max_tokens": 1024,
-                    },
-                )
-                res.raise_for_status()
-                output_text = res.json()["choices"][0]["message"]["content"]
-                
-                json_match = re.search(r'\[.*\]', output_text.replace('\n', ' '), re.DOTALL)
-                if json_match:
-                    texts.append(json_match.group(0))
-                else:
-                    texts.append(output_text)
-                    
-                logger.debug("llama.cpp vision page %d processed", i + 1)
-            except Exception as e:
-                logger.warning("llama.cpp Vision failed on page %d: %s", i + 1, e)
+    for i, page in enumerate(doc):
+        try:
+            scale = 200 / 72
+            bitmap = page.render(scale=scale, rotation=0)
+            pil_image = bitmap.to_pil().convert("RGB")
+            
+            img_array = np.array(pil_image)
+            result = ocr.ocr(img_array, cls=False)
+            
+            if result and result[0]:
+                for line in result[0]:
+                    texts.append(line[1][0])
+            
+            logger.debug("PaddleOCR page %d processed", i + 1)
+        except Exception as e:
+            logger.warning("PaddleOCR failed on page %d: %s", i + 1, e)
 
     doc.close()
     return "\n".join(texts)
@@ -256,43 +233,21 @@ async def parse_pdf(content: bytes) -> list[dict]:
 
     # ── 3. OCR fallback (image-based / scanned PDF) ──
     if not rows and not has_any_text:
-        logger.info("PDF appears to be image-based, attempting LLM Vision parsing")
-        ocr_json_str = await _llm_vision_parse_pdf(content)
+        logger.info("PDF appears to be image-based, attempting PaddleOCR extraction")
         
-        if ocr_json_str.strip():
-            try:
-                blocks = re.findall(r'\[.*?\]', ocr_json_str.replace('\n', ' '), re.DOTALL)
-                for block in blocks:
-                    items = json.loads(block)
-                    if isinstance(items, list):
-                        for item in items:
-                            try:
-                                amount = Decimal(str(item.get("amount", "0")).replace(",", ""))
-                                if amount <= 0: continue
-                                
-                                tx_date = _parse_date_str(str(item.get("date", ""))) or date.today()
-                                
-                                rows.append({
-                                    "date": tx_date,
-                                    "type": item.get("type", "expense").lower(),
-                                    "amount": amount,
-                                    "description": item.get("description", "Bank transaction"),
-                                    "category": categorize(item.get("description", ""), item.get("type", "expense").lower()),
-                                    "source": "statement",
-                                })
-                            except Exception:
-                                pass
-            except Exception as e:
-                logger.warning("Failed to parse LLM JSON output: %s", e)
-                # Fallback to regex if JSON extraction fails but text was returned
-                rows = _parse_text_rows(ocr_json_str)
-
+        # Run PaddleOCR in a thread since it is blocking CPU-bound work
+        ocr_text = await asyncio.to_thread(_paddleocr_parse_pdf, content)
+        
+        if ocr_text.strip():
+            # Pass raw OCR text block into the same regex parser
+            rows = _parse_text_rows(ocr_text)
+            
             if not rows:
-                logger.warning("LLM extracted text but no transactions found.")
+                logger.warning("PaddleOCR extracted text but regex parser found no transactions.")
         else:
             logger.warning(
-                "PDF is image-based and LLM Vision returned no text. "
-                "Ensure transformers and qwen-vl-utils are installed."
+                "PDF is image-based and PaddleOCR returned no text. "
+                "Ensure paddleocr is installed and functioning."
             )
 
     return rows

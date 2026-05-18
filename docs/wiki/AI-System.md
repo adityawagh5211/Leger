@@ -5,7 +5,7 @@
 Ledger uses a hybrid AI architecture that prioritizes speed, cost, and privacy. Every AI operation follows a 4-layer fallback chain:
 
 ```
-Request → Rule Engine → Local LLM (llama.cpp) → Cloud LLM (Anthropic) → Graceful Fallback
+Request → Rule Engine/Regex → PaddleOCR (if image) → Local Text LLM (llama.cpp) → Cloud LLM (Anthropic) → Graceful Fallback
 ```
 
 ## Layer 1: Rule Engine
@@ -27,17 +27,18 @@ For operations that need language understanding:
 
 | Setting | Value |
 |---|---|
-| Server | `llama-qwen2vl-cli` (llama.cpp) |
+| Server | `llama-server` (llama.cpp) |
 | URL | `LLAMA_SERVER_URL` (default: `http://127.0.0.1:8080`) |
-| Multimodal Model | Qwen2-VL-2B-Instruct Q4_K_M + mmproj |
-| VRAM | ~2.5GB for 2B model |
+| Text Model | Qwen2.5-1.5B-Instruct Q4_K_M |
+| VRAM | ~1.5GB for 1.5B model |
 
 **Activation:** Set `LLAMA_ENABLED=true` in `.env`
 
 ### Used For
 - Complex transaction categorization
 - Proactive financial insights
-- Receipt OCR (structured data extraction from images)
+- Structuring raw OCR text from receipts
+- Bill negotiation strategies
 - Bill negotiation strategies
 
 ## Layer 3: Cloud LLM (Anthropic)

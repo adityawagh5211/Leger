@@ -74,10 +74,9 @@ The app is available at **http://127.0.0.1:5173**.
 For offline AI capabilities:
 
 ```bash
-# Download a multimodal GGUF model (e.g., Qwen2-VL-2B-Instruct)
+# Download a text GGUF model (e.g., Qwen2.5-1.5B-Instruct)
 # Run llama.cpp server
-./llama-qwen2vl-cli -m models/Qwen2-VL-2B-Instruct-Q4_K_M.gguf \
-  --mmproj models/mmproj-Qwen2-VL-2B-Instruct-f32.gguf \
+./llama-server -m models/Qwen2.5-1.5B-Instruct-Q4_K_M.gguf \
   --port 8080 --ctx-size 4096 --n-gpu-layers 35
 
 # Enable in backend/.env
