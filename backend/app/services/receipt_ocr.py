@@ -47,7 +47,7 @@ def _paddleocr_extract(image_bytes: bytes) -> str:
         pil_image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
         img_array = np.array(pil_image)
         
-        result = ocr.ocr(img_array, cls=False)
+        result = ocr.ocr(img_array)
         texts = []
         if result and result[0]:
             for line in result[0]:

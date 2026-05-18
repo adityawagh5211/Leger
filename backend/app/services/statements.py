@@ -184,7 +184,7 @@ def _paddleocr_parse_pdf(content: bytes) -> str:
             pil_image = bitmap.to_pil().convert("RGB")
             
             img_array = np.array(pil_image)
-            result = ocr.ocr(img_array, cls=False)
+            result = ocr.ocr(img_array)
             
             if result and result[0]:
                 for line in result[0]:
