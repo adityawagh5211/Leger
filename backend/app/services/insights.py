@@ -20,6 +20,10 @@ def monthly_summary(transactions: list[Transaction]) -> dict:
     by_month: dict[str, dict] = defaultdict(lambda: {"income": Decimal("0"), "expenses": Decimal("0")})
     dates = [tx.date for tx in transactions]
 
+    # Cash-only breakdown (source='cash' = manually entered, not from bank statement)
+    cash_income = sum((t.amount for t in transactions if t.type == "income" and t.source == "cash"), Decimal("0"))
+    cash_expenses = sum((t.amount for t in transactions if t.type == "expense" and t.source == "cash"), Decimal("0"))
+
     for tx in transactions:
         day = str(tx.date)
         month = tx.date.strftime("%Y-%m")
@@ -38,6 +42,11 @@ def monthly_summary(transactions: list[Transaction]) -> dict:
         "income": income,
         "expenses": expenses,
         "net": income - expenses,
+        "opening_balance": None,   # computed by caller via DB query
+        "closing_balance": None,   # computed by caller via DB query
+        "cash_income": cash_income,
+        "cash_expenses": cash_expenses,
+        "cash_net": cash_income - cash_expenses,
         "by_category": dict(by_category),
         "by_day": dict(by_day),
         "by_month": dict(by_month),
@@ -45,6 +54,7 @@ def monthly_summary(transactions: list[Transaction]) -> dict:
         "period_end": end_date,
         "months_covered": len({d.strftime("%Y-%m") for d in dates}),
     }
+
 
 
 def dynamic_budget_suggestions(transactions: list[Transaction]) -> list[dict]:
@@ -150,6 +160,15 @@ def build_advisor_context(
     last_month = (date.today().replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
     last_month_stats = summary["by_month"].get(last_month, {"income": Decimal("0"), "expenses": Decimal("0")})
 
+    # Format balance lines if available from bank statement data
+    opening_bal = summary.get("opening_balance")
+    closing_bal = summary.get("closing_balance")
+    balance_line = ""
+    if closing_bal is not None:
+        balance_line = f"  Opening Balance: INR {opening_bal if opening_bal is not None else 'N/A'} | Closing Balance: INR {closing_bal}"
+    else:
+        balance_line = f"  Net Cash Flow: INR {summary['net']} (no bank balance data — transactions may be manual/SMS)"
+
     context = f"""[Financial Snapshot - {period}]
 Current Date: {today_str}
 Period covered: {period} across {summary["months_covered"]} calendar month(s).
@@ -158,7 +177,9 @@ Last Month ({last_month}) Summary:
   Income: INR {last_month_stats['income']} | Expenses: INR {last_month_stats['expenses']}
 
 Overall Snapshot:
-  Income: INR {summary["income"]} | Expenses: INR {summary["expenses"]} | Net: INR {summary["net"]}
+  Income (Credits): INR {summary["income"]} | Expenses (Debits): INR {summary["expenses"]} | Net Flow: INR {summary["net"]}
+Balance:
+{balance_line}
 
 Top Spending by Category:
 {chr(10).join(budget_lines) or "  No expense data yet."}

@@ -4,7 +4,7 @@ import { CardSkeleton } from "../components/ui";
 import { useToast } from "../components/ui";
 import ProactiveInsights from "../components/ProactiveInsights";
 import {
-  TrendingUp, TrendingDown, DollarSign, PiggyBank, Calendar, AlertCircle, BarChart3, Target,
+  TrendingUp, TrendingDown, DollarSign, PiggyBank, Calendar, AlertCircle, BarChart3, Target, Banknote,
 } from "lucide-react";
 import {
   BarChart, Bar, Area, AreaChart, Cell, Pie, PieChart,
@@ -51,6 +51,11 @@ export default function Dashboard({ analyticsOnly = false }) {
     ? `${summary.period_start} to ${summary.period_end}`
     : "All available transactions";
 
+  // Use bank-reported balances when available (from statement imports with Balance column)
+  const closingBalance = summary?.closing_balance != null ? Number(summary.closing_balance) : null;
+  const openingBalance = summary?.opening_balance != null ? Number(summary.opening_balance) : null;
+  const hasBalanceData = closingBalance !== null;
+
   const byCategory = summary?.by_category || {};
   const pieRows = Object.entries(byCategory)
     .map(([name, value]) => ({ name, value: Number(value) }))
@@ -74,11 +79,25 @@ export default function Dashboard({ analyticsOnly = false }) {
       Expenses: Number(row.expenses),
     }));
 
+  // Cash transactions (manually entered, NOT from bank statement)
+  const cashIncome = Number(summary?.cash_income || 0);
+  const cashExpenses = Number(summary?.cash_expenses || 0);
+  const cashNet = Number(summary?.cash_net || 0);
+  const hasCash = cashIncome > 0 || cashExpenses > 0;
+
   const kpiCards = [
     { label: "Total Income", val: income, change: periodLabel, type: "positive", Icon: TrendingUp },
     { label: "Total Expenses", val: expenses, change: periodLabel, type: "negative", Icon: TrendingDown },
     { label: "Money Saved", val: saved, change: income > 0 ? `${savingsRate}% of income` : "—", type: "positive", Icon: PiggyBank },
     { label: "Recurring", val: summary?.recurring?.length || 0, change: "Payments detected", type: "muted", Icon: Calendar },
+    ...(hasCash ? [{
+      label: "Cash on Hand",
+      val: cashNet,
+      change: cashExpenses > 0 ? `In: ${money(cashIncome)} · Out: ${money(cashExpenses)}` : `Received ${money(cashIncome)} in cash`,
+      type: cashNet >= 0 ? "positive" : "negative",
+      Icon: Banknote,
+      isCash: true,
+    }] : []),
   ];
 
   return (
@@ -109,27 +128,56 @@ export default function Dashboard({ analyticsOnly = false }) {
       {/* Net worth hero */}
       {!analyticsOnly && (
         <div className="card hero-card">
-          <div className="hero-label"><DollarSign size={15} /> Net Balance</div>
-          <div className="hero-amount">{money(net)}</div>
-          <div className={`hero-change ${net >= 0 ? "positive" : "negative"}`}>
-            {net >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-            {income > 0 ? `${savingsRate}% savings rate` : "No income recorded yet"}
-          </div>
+          {hasBalanceData ? (
+            <>
+              <div className="hero-label"><DollarSign size={15} /> Closing Balance</div>
+              <div className="hero-amount">{money(closingBalance)}</div>
+              <div className={`hero-change ${net >= 0 ? "positive" : "negative"}`}>
+                {net >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+                {openingBalance !== null
+                  ? `Opened at ${money(openingBalance)} · Net flow ${net >= 0 ? "+" : ""}${money(net)}`
+                  : `Net flow ${net >= 0 ? "+" : ""}${money(net)}`}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="hero-label"><DollarSign size={15} /> Net Cash Flow</div>
+              <div className="hero-amount">{money(net)}</div>
+              <div className={`hero-change ${net >= 0 ? "positive" : "negative"}`}>
+                {net >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+                {income > 0 ? `${savingsRate}% savings rate` : "No income recorded yet"}
+              </div>
+            </>
+          )}
         </div>
       )}
 
       {/* KPI cards */}
       <div className="account-grid">
-        {kpiCards.map(({ label, val, change, type, Icon }) => (
-          <div className="card account-card" key={label}>
+        {kpiCards.map(({ label, val, change, type, Icon, isCash }) => (
+          <div
+            className="card account-card"
+            key={label}
+            style={isCash ? {
+              borderLeft: "3px solid #f59e0b",
+              background: "linear-gradient(135deg, rgba(245,158,11,0.08) 0%, var(--card-bg) 100%)"
+            } : {}}
+          >
             <div className="account-card-header">
               <span className="account-label">{label}</span>
-              <Icon size={20} className={`icon-${type}`} />
+              <Icon size={20} className={`icon-${type}`} style={isCash ? { color: "#f59e0b" } : {}} />
             </div>
             <div className="account-amount">
               {label === "Recurring" ? val : money(val)}
             </div>
-            <div className={`account-change ${type}`}>{change}</div>
+            <div className={`account-change ${type}`}>
+              {isCash ? (
+                <span style={{ color: "#a78bfa", fontSize: "11px" }}>
+                  ✦ Not in bank balance · Physical cash
+                </span>
+              ) : null}
+              {change}
+            </div>
           </div>
         ))}
       </div>
@@ -228,7 +276,7 @@ export default function Dashboard({ analyticsOnly = false }) {
       {analyticsOnly && (
         <div className="account-grid">
           {[
-            { name: "Net Balance", val: money(net), sub: savingsRate > 0 ? `+${savingsRate}% savings` : "—", Icon: DollarSign },
+            { name: "Closing Balance", val: hasBalanceData ? money(closingBalance) : money(net), sub: hasBalanceData && openingBalance !== null ? `Opened at ${money(openingBalance)}` : savingsRate > 0 ? `+${savingsRate}% savings` : "—", Icon: DollarSign },
             { name: "Savings Rate", val: `${savingsRate}%`, sub: "This period", Icon: PiggyBank },
             { name: "Total Expenses", val: money(expenses), sub: `${pieRows.length} categories`, Icon: BarChart3 },
             { name: "Top Category", val: topCat, sub: money(byCategory[topCat] || 0), Icon: Target },

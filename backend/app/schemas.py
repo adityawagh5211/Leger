@@ -46,6 +46,8 @@ class TransactionIn(BaseModel):
     account_id: str | None = None
     tags: str | None = None
     notes: str | None = None
+    running_balance: Decimal | None = None  # Bank balance after this transaction
+    stmt_seq: int | None = None             # Row index in bank statement (0-based)
 
 
 class TransactionOut(BaseModel):
@@ -62,6 +64,7 @@ class TransactionOut(BaseModel):
     account_id: str | None = None
     tags: str | None = None
     notes: str | None = None
+    running_balance: Decimal | None = None  # Bank balance after this transaction
     created_at: datetime
 
     model_config = {"from_attributes": True}

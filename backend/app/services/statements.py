@@ -97,6 +97,21 @@ def _normalize_frame(df: pd.DataFrame) -> list[dict]:
     if not date_col or not desc_col or not (amount_col or debit_col or credit_col):
         return []
 
+    # Detect the Balance column — must contain "balance" or equal "bal",
+    # but must NOT be the debit or credit column itself.
+    balance_col = next(
+        (
+            normalized[c]
+            for c in normalized
+            if ("balance" in c or c == "bal")
+            and "debit" not in c
+            and "credit" not in c
+            and "withdraw" not in c
+            and "deposit" not in c
+        ),
+        None,
+    )
+
     rows: list[dict] = []
     for idx, row in df.iterrows():
         description = str(row.get(desc_col, "")).strip()
@@ -118,6 +133,16 @@ def _normalize_frame(df: pd.DataFrame) -> list[dict]:
 
         tx_type = "income" if valid.credit > 0 else "expense"
         amount = valid.credit if valid.credit > 0 else valid.debit
+
+        # Capture bank-reported running balance from the Balance column (e.g. SBI statement)
+        running_balance: Decimal | None = None
+        if balance_col is not None:
+            bal_raw = row.get(balance_col)
+            if bal_raw is not None:
+                parsed_bal = _money(bal_raw)
+                if parsed_bal != Decimal("0"):
+                    running_balance = parsed_bal
+
         rows.append(
             {
                 "date": valid.date,
@@ -126,6 +151,7 @@ def _normalize_frame(df: pd.DataFrame) -> list[dict]:
                 "description": valid.description,
                 "category": categorize(valid.description, tx_type),
                 "source": "statement",
+                "running_balance": running_balance,
             }
         )
     return rows

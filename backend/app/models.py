@@ -75,6 +75,10 @@ class Transaction(Base):
     gst_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
     gst_amount: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     hsn_code: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # Bank-reported running balance AFTER this transaction (from statement Balance column)
+    running_balance: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    # CSV row sequence index (0-based) to preserve bank statement order for same-batch imports
+    stmt_seq: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     user: Mapped["User"] = relationship(back_populates="transactions")
     account: Mapped["Account | None"] = relationship(back_populates="transactions")

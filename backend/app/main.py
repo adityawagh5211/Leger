@@ -360,11 +360,61 @@ def get_summary(
     transactions = q.all()
     budgets = db.query(Budget).filter(Budget.user_id == user.id).all()
     summary = monthly_summary(transactions)
+
+    # ── Compute opening / closing balance via direct SQL (reliable for batch imports) ──
+    # Batch-imported transactions share an identical created_at timestamp. We stored
+    # stmt_seq (CSV row index) during import to preserve original statement order.
+    opening_balance = None
+    closing_balance = None
+
+    if transactions:
+        bal_filter = [
+            Transaction.user_id == user.id,
+            Transaction.running_balance.isnot(None),
+            Transaction.stmt_seq.isnot(None),
+        ]
+        if month:
+            period_start, period_end = _month_range(month)
+            bal_filter += [Transaction.date >= period_start, Transaction.date < period_end]
+        elif range:
+            period_start_d = _history_start(range)
+            if period_start_d:
+                bal_filter.append(Transaction.date >= period_start_d)
+
+        # Closing balance: the LAST row in statement order (highest stmt_seq) gives
+        # the authoritative closing balance for the period.
+        last_tx = (
+            db.query(Transaction)
+            .filter(*bal_filter)
+            .order_by(Transaction.stmt_seq.desc())
+            .first()
+        )
+        if last_tx:
+            closing_balance = last_tx.running_balance
+
+        # Opening balance: reconstruct from the FIRST row in statement order (lowest stmt_seq).
+        # opening = running_balance_of_first_tx ± first_tx_amount
+        first_tx = (
+            db.query(Transaction)
+            .filter(*bal_filter)
+            .order_by(Transaction.stmt_seq.asc())
+            .first()
+        )
+        if first_tx:
+            if first_tx.type == "income":
+                opening_balance = first_tx.running_balance - first_tx.amount
+            else:
+                opening_balance = first_tx.running_balance + first_tx.amount
+
+    summary["opening_balance"] = opening_balance
+    summary["closing_balance"] = closing_balance
+
     return {
         **summary,
         "insights": compute_insights(transactions, budgets),
         "recurring": recurring_payments(transactions),
     }
+
 
 
 # ── SMS Import ────────────────────────────────────────────────────────────────
@@ -470,7 +520,8 @@ async def import_statement(
                 rows = await parse_pdf(content)
 
             saved_count = 0
-            for row in rows:
+            for seq, row in enumerate(rows):
+                row["stmt_seq"] = seq          # preserve bank statement row order
                 validated = TransactionIn(**row).model_dump()
                 # SHA-256 dedup on date+amount+description
                 fingerprint = hashlib.sha256(
