@@ -71,6 +71,7 @@ from .schemas import (
     PortfolioIn,
     PortfolioOut,
     ProactiveInsight,
+    SmsWebhookRequest,
     SmsParseRequest,
     TransactionIn,
     TransactionOut,
@@ -98,7 +99,7 @@ from .services.proactive_insights import generate_proactive_insights
 from .services.prompt_guard import build_safe_messages, sanitize_user_input
 from .services.receipt_ocr import parse_receipt_image
 from .services.sms_parser import parse_sms
-from .services.statements import parse_csv, parse_pdf
+from .services.statements import parse_csv, parse_excel, parse_pdf
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -145,6 +146,18 @@ def _tx_query(db: Session, user_id: str, month: str | None = None):
         start, end = _month_range(month)
         q = q.filter(Transaction.date >= start, Transaction.date < end)
     return q.order_by(Transaction.date.desc(), Transaction.created_at.desc())
+
+
+def _history_start(range_key: str | None) -> date | None:
+    from datetime import timedelta
+
+    if not range_key or range_key == "3m":
+        return date.today() - timedelta(days=92)
+    if range_key == "1y":
+        return date.today() - timedelta(days=365)
+    if range_key == "all":
+        return None
+    raise HTTPException(status_code=400, detail="range must be 3m, 1y, or all")
 
 
 def _cursor_encode(tx: Transaction) -> str:
@@ -273,21 +286,15 @@ def upsert_budgets(
 
 @app.get("/budgets/suggestions")
 def budget_suggestions(
+    range: str | None = Query("3m", pattern="^(3m|1y|all)$"),
     user: UserContext = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    from datetime import timedelta
-
-    today = date.today()
-    txs = (
-        db.query(Transaction)
-        .filter(
-            Transaction.user_id == user.id,
-            Transaction.type == "expense",
-            Transaction.date >= today - timedelta(days=92),
-        )
-        .all()
-    )
+    q = db.query(Transaction).filter(Transaction.user_id == user.id, Transaction.type == "expense")
+    start = _history_start(range)
+    if start:
+        q = q.filter(Transaction.date >= start)
+    txs = q.all()
     return dynamic_budget_suggestions(txs)
 
 
@@ -341,6 +348,41 @@ def import_sms(
     return saved
 
 
+@app.post("/imports/sms/webhook", response_model=list[TransactionOut])
+def import_sms_webhook(
+    payload: SmsWebhookRequest,
+    user: UserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Receive SMS payloads from an Android companion bridge and reuse the SMS parser."""
+    saved = []
+    for message in payload.messages:
+        parsed = parse_sms(message)
+        if not parsed:
+            continue
+        if payload.device_id:
+            parsed["notes"] = f"SMS bridge device: {payload.device_id}"
+        duplicate = (
+            db.query(Transaction)
+            .filter(
+                Transaction.user_id == user.id,
+                Transaction.source == "sms",
+                Transaction.source_ref == parsed["source_ref"],
+            )
+            .first()
+        )
+        if duplicate:
+            continue
+        tx = Transaction(user_id=user.id, **parsed)
+        db.add(tx)
+        saved.append(tx)
+    db.commit()
+    for tx in saved:
+        db.refresh(tx)
+    logger.info("sms.webhook user=%s device=%s imported=%d", user.id, payload.device_id, len(saved))
+    return saved
+
+
 # ── Statement Import (async job) ──────────────────────────────────────────────
 @app.post("/imports/statement", response_model=ImportJobOut, status_code=202)
 async def import_statement(
@@ -351,8 +393,8 @@ async def import_statement(
     if not file.filename:
         raise HTTPException(status_code=400, detail="No filename provided")
     ext = file.filename.lower().rsplit(".", 1)[-1]
-    if ext not in ("csv", "pdf"):
-        raise HTTPException(status_code=400, detail="Upload a CSV or PDF statement")
+    if ext not in ("csv", "pdf", "xls", "xlsx"):
+        raise HTTPException(status_code=400, detail="Upload a CSV, Excel, or PDF statement")
     if file.size and file.size > 10 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File too large (max 10MB)")
 
@@ -370,14 +412,19 @@ async def import_statement(
         try:
             if ext == "csv":
                 rows = parse_csv(content)
+            elif ext in ("xls", "xlsx"):
+                rows = parse_excel(content)
             else:
                 rows = await parse_pdf(content)
 
             saved_count = 0
             for row in rows:
+                validated = TransactionIn(**row).model_dump()
                 # SHA-256 dedup on date+amount+description
-                fingerprint = hashlib.sha256(f"{row['date']}{row['amount']}{row['description']}".encode()).hexdigest()
-                row["source_ref"] = fingerprint
+                fingerprint = hashlib.sha256(
+                    f"{validated['date']}{validated['amount']}{validated['description']}".encode()
+                ).hexdigest()
+                validated["source_ref"] = fingerprint
 
                 duplicate = (
                     db.query(Transaction)
@@ -389,7 +436,7 @@ async def import_statement(
                     .first()
                 )
                 if not duplicate:
-                    db.add(Transaction(user_id=user.id, **row))
+                    db.add(Transaction(user_id=user.id, **validated))
                     saved_count += 1
 
             db.commit()

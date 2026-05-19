@@ -97,6 +97,11 @@ class SmsParseRequest(BaseModel):
     messages: list[str] = Field(min_length=1, max_length=100)
 
 
+class SmsWebhookRequest(SmsParseRequest):
+    device_id: str | None = Field(default=None, max_length=128)
+    received_at: datetime | None = None
+
+
 class ImportJobOut(BaseModel):
     id: str
     status: str

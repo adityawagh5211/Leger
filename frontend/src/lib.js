@@ -10,12 +10,19 @@ function getToken() {
   return currentToken;
 }
 
+export function authHeaders(extra = {}) {
+  return {
+    Authorization: `Bearer ${getToken()}`,
+    ...extra,
+  };
+}
+
 export async function apiFetch(path, opts = {}) {
   const isFormData = opts.body instanceof FormData;
   const res = await fetch(`${API_BASE}${path}`, {
     ...opts,
     headers: {
-      Authorization: `Bearer ${getToken()}`,
+      ...authHeaders(),
       ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...(opts.headers || {}),
     },

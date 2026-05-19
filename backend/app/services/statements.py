@@ -8,19 +8,19 @@ PDF parsing strategy (in order of preference):
      pip install easyocr
 """
 
-import logging
-
 import re
+import csv
 import json
-import asyncio
+import logging
+import base64
 from datetime import datetime, date
 from decimal import Decimal, InvalidOperation
 from io import BytesIO, StringIO
 
+import httpx
 import pandas as pd
 import pdfplumber
-import httpx
-import base64
+from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
 from ..config import settings
 from .categorizer import categorize
@@ -38,13 +38,47 @@ def _money(value) -> Decimal:
         return Decimal("0")
 
 
+class StatementRow(BaseModel):
+    date: date
+    description: str = Field(min_length=1, max_length=500)
+    debit: Decimal = Field(default=Decimal("0"), ge=0)
+    credit: Decimal = Field(default=Decimal("0"), ge=0)
+
+    @field_validator("description", mode="before")
+    @classmethod
+    def clean_description(cls, value):
+        return re.sub(r"\s+", " ", str(value or "")).strip()
+
+    @model_validator(mode="after")
+    def validate_amounts(self):
+        if self.debit <= 0 and self.credit <= 0:
+            raise ValueError("row has no debit or credit amount")
+        if self.debit > 0 and self.credit > 0:
+            raise ValueError("row has both debit and credit amounts")
+        return self
+
+
+def _parse_date_value(value) -> date | None:
+    parsed = pd.to_datetime(value, errors="coerce", dayfirst=True)
+    if pd.isna(parsed):
+        return None
+    return parsed.date()
+
+
 # ── Structured table parser ───────────────────────────────────────────────────
 
 def _normalize_frame(df: pd.DataFrame) -> list[dict]:
-    normalized = {str(c).strip().lower(): c for c in df.columns}
+    df = df.dropna(how="all")
+    normalized = {str(c).strip().lower().replace("\ufeff", ""): c for c in df.columns}
     date_col = next((normalized[c] for c in normalized if "date" in c), None)
     desc_col = next(
-        (normalized[c] for c in normalized if c in {"description", "details", "narration", "particulars"}), None
+        (
+            normalized[c]
+            for c in normalized
+            if c in {"description", "details", "narration", "particulars"}
+            or any(token in c for token in ("description", "detail", "narration", "particular", "remarks"))
+        ),
+        None,
     )
     amount_col = next((normalized[c] for c in normalized if "amount" in c), None)
     debit_col = next((normalized[c] for c in normalized if "debit" in c or "withdraw" in c), None)
@@ -53,30 +87,33 @@ def _normalize_frame(df: pd.DataFrame) -> list[dict]:
         return []
 
     rows: list[dict] = []
-    for _, row in df.iterrows():
+    for idx, row in df.iterrows():
         description = str(row.get(desc_col, "")).strip()
-        parsed_date = pd.to_datetime(row.get(date_col), errors="coerce")
-        if not description or pd.isna(parsed_date):
+        parsed_date = _parse_date_value(row.get(date_col))
+        if not description or not parsed_date:
             continue
 
         debit = _money(row.get(debit_col)) if debit_col else Decimal("0")
         credit = _money(row.get(credit_col)) if credit_col else Decimal("0")
         if amount_col:
             raw = _money(row.get(amount_col))
-            tx_type = "income" if raw > 0 else "expense"
-            amount = abs(raw)
-        else:
-            tx_type = "income" if credit > 0 else "expense"
-            amount = credit if credit > 0 else debit
-        if amount <= 0:
+            debit = abs(raw) if raw < 0 else Decimal("0")
+            credit = raw if raw > 0 else Decimal("0")
+        try:
+            valid = StatementRow(date=parsed_date, description=description, debit=debit, credit=credit)
+        except ValidationError as exc:
+            logger.warning("CSV row skipped idx=%s reason=%s", idx, exc.errors()[0]["msg"])
             continue
+
+        tx_type = "income" if valid.credit > 0 else "expense"
+        amount = valid.credit if valid.credit > 0 else valid.debit
         rows.append(
             {
-                "date": parsed_date.date(),
+                "date": valid.date,
                 "type": tx_type,
                 "amount": amount,
-                "description": description,
-                "category": categorize(description, tx_type),
+                "description": valid.description,
+                "category": categorize(valid.description, tx_type),
                 "source": "statement",
             }
         )
@@ -89,6 +126,7 @@ _DATE_RE = re.compile(
     r"\b(\d{1,2}[\/\-]\d{2}[\/\-]\d{4}|\d{1,2}\s+[A-Za-z]{3}\s+\d{4}|\d{1,2}[A-Za-z]{3}\d{2,4})\b"
 )
 _AMOUNT_RE = re.compile(r"([0-9,]+\.[0-9]{2})")
+_MARKDOWN_TABLE_RE = re.compile(r"^\s*\|.+\|\s*$")
 
 
 def _parse_date_str(s: str) -> "datetime.date | None":
@@ -147,6 +185,106 @@ def _parse_text_rows(text: str) -> list[dict]:
     return rows
 
 
+def _strip_code_fence(text: str) -> str:
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        stripped = re.sub(r"^```(?:json|csv|markdown|md)?\s*", "", stripped, flags=re.I)
+        stripped = re.sub(r"\s*```$", "", stripped)
+    return stripped.strip()
+
+
+def _rows_from_json_text(text: str) -> list[dict]:
+    raw = _strip_code_fence(text)
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        match = re.search(r"(\[[\s\S]+\]|\{[\s\S]+\})", raw)
+        if not match:
+            return []
+        try:
+            payload = json.loads(match.group(1))
+        except json.JSONDecodeError:
+            return []
+
+    if isinstance(payload, dict):
+        payload = payload.get("transactions") or payload.get("rows") or []
+    if not isinstance(payload, list):
+        return []
+
+    frame_rows = []
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        frame_rows.append(
+            {
+                "date": item.get("date") or item.get("txn_date") or item.get("transaction_date"),
+                "details": item.get("description") or item.get("details") or item.get("narration") or item.get("particulars"),
+                "debit": item.get("debit") or item.get("withdrawal") or item.get("withdrawals") or "",
+                "credit": item.get("credit") or item.get("deposit") or item.get("deposits") or "",
+                "balance": item.get("balance") or "",
+            }
+        )
+    return _normalize_frame(pd.DataFrame(frame_rows))
+
+
+def _rows_from_markdown_tables(text: str) -> list[dict]:
+    rows: list[dict] = []
+    table_lines: list[str] = []
+
+    def flush_table():
+        if len(table_lines) < 2:
+            table_lines.clear()
+            return
+        header = [cell.strip() for cell in table_lines[0].strip().strip("|").split("|")]
+        data_lines = [
+            line for line in table_lines[1:]
+            if not re.match(r"^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$", line)
+        ]
+        records = []
+        for line in data_lines:
+            cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+            if len(cells) != len(header):
+                continue
+            records.append(dict(zip(header, cells, strict=False)))
+        if records:
+            rows.extend(_normalize_frame(pd.DataFrame(records)))
+        table_lines.clear()
+
+    for line in text.splitlines():
+        if _MARKDOWN_TABLE_RE.match(line):
+            table_lines.append(line)
+        elif table_lines:
+            flush_table()
+    if table_lines:
+        flush_table()
+    return rows
+
+
+def _rows_from_csv_text(text: str) -> list[dict]:
+    raw = _strip_code_fence(text)
+    sample = "\n".join(line for line in raw.splitlines() if line.strip())
+    if "," not in sample or "date" not in sample.lower():
+        return []
+    try:
+        dialect = csv.Sniffer().sniff(sample[:4096])
+    except csv.Error:
+        dialect = "excel"
+    try:
+        return _normalize_frame(pd.read_csv(StringIO(sample), dtype=str, keep_default_na=False, dialect=dialect))
+    except Exception:
+        return []
+
+
+def _parse_ai_rows(text: str) -> list[dict]:
+    if not text.strip():
+        return []
+    for parser in (_rows_from_json_text, _rows_from_csv_text, _rows_from_markdown_tables, _parse_text_rows):
+        rows = parser(text)
+        if rows:
+            return rows
+    return []
+
+
 async def _gemini_parse_pdf(content: bytes) -> str:
     """Send the PDF to Gemini 1.5 Flash to extract transaction text."""
     if not settings.gemini_api_key:
@@ -159,7 +297,13 @@ async def _gemini_parse_pdf(content: bytes) -> str:
         model = genai.GenerativeModel("gemini-2.5-flash")
         
         pdf_part = {"mime_type": "application/pdf", "data": content}
-        prompt = "You are a financial data extraction assistant. Extract all transaction rows from this bank statement. Maintain the original row structure so regex can parse it. Do not add any extra commentary."
+        prompt = """Extract every bank statement transaction from this PDF.
+Return only JSON with this shape:
+{"transactions":[{"date":"DD/MM/YYYY","description":"...","debit":"0.00","credit":"0.00","balance":"0.00"}]}
+Rules:
+- Do not include statement summary, totals, opening balance, closing balance, or blank rows.
+- Preserve full UPI narration/merchant text in description.
+- Use debit for withdrawals/expenses and credit for deposits/income. Use empty string or 0.00 for the unused side."""
         
         response = await model.generate_content_async([pdf_part, prompt])
         return response.text
@@ -174,20 +318,31 @@ async def _mistral_ocr_pdf(content: bytes) -> str:
 
     logger.info("Sending PDF to Mistral OCR...")
     try:
-        from mistralai import Mistral
-        import base64
-        
-        client = Mistral(api_key=settings.mistral_api_key)
         pdf_b64 = base64.b64encode(content).decode("utf-8")
-        
-        response = await client.ocr.process_async(
-            model="mistral-ocr-latest",
-            document={
+
+        payload = {
+            "model": "mistral-ocr-latest",
+            "document": {
                 "type": "document_url",
-                "document_url": f"data:application/pdf;base64,{pdf_b64}"
-            }
-        )
-        texts = [page.markdown for page in response.pages]
+                "document_url": f"data:application/pdf;base64,{pdf_b64}",
+            },
+            "include_image_base64": False,
+            "table_format": "markdown",
+            "extract_header": False,
+            "extract_footer": False,
+        }
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                "https://api.mistral.ai/v1/ocr",
+                headers={
+                    "Authorization": f"Bearer {settings.mistral_api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
+        response.raise_for_status()
+        data = response.json()
+        texts = [page.get("markdown", "") for page in data.get("pages", [])]
         return "\n".join(texts)
     except Exception as e:
         logger.warning("Mistral OCR extraction failed: %s", e)
@@ -199,7 +354,18 @@ async def _mistral_ocr_pdf(content: bytes) -> str:
 
 def parse_csv(content: bytes) -> list[dict]:
     text = content.decode("utf-8-sig")
-    return _normalize_frame(pd.read_csv(StringIO(text)))
+    df = pd.read_csv(StringIO(text), dtype=str, keep_default_na=False)
+    return _normalize_frame(df)
+
+
+def parse_excel(content: bytes) -> list[dict]:
+    rows: list[dict] = []
+    workbook = pd.read_excel(BytesIO(content), sheet_name=None, dtype=str, keep_default_na=False)
+    for sheet_name, df in workbook.items():
+        parsed = _normalize_frame(df)
+        logger.info("Excel sheet parsed sheet=%s rows=%d", sheet_name, len(parsed))
+        rows.extend(parsed)
+    return rows
 
 
 async def parse_pdf(content: bytes) -> list[dict]:
@@ -229,21 +395,17 @@ async def parse_pdf(content: bytes) -> list[dict]:
         rows = _parse_text_rows("\n".join(full_text_lines))
 
     # ── 3. AI Parsing fallback (image-based / scanned PDF) ──
-    if not rows and not has_any_text:
-        logger.info("PDF appears to be image-based, attempting Gemini extraction")
-        ocr_text = await _gemini_parse_pdf(content)
-        
-        if not ocr_text.strip():
-            logger.info("Gemini failed or returned empty, attempting Mistral OCR")
-            ocr_text = await _mistral_ocr_pdf(content)
-        
-        if ocr_text.strip():
-            # Pass raw extracted text block into the same regex parser
-            rows = _parse_text_rows(ocr_text)
-            
-            if not rows:
-                logger.warning("AI extracted text but regex parser found no transactions.")
-        else:
-            logger.warning("PDF is image-based and all AI extractors failed.")
+    if not rows:
+        logger.info("PDF local extraction found no rows; attempting Mistral OCR")
+        ocr_text = await _mistral_ocr_pdf(content)
+        rows = _parse_ai_rows(ocr_text)
+
+        if not rows:
+            logger.info("Mistral OCR empty/unparseable; attempting Gemini extraction")
+            ocr_text = await _gemini_parse_pdf(content)
+            rows = _parse_ai_rows(ocr_text)
+
+        if not rows:
+            logger.warning("PDF OCR providers returned no parseable transactions.")
 
     return rows

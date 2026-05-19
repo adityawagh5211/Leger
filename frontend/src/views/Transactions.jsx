@@ -206,8 +206,8 @@ export default function Transactions() {
         <div className="card">
           <div className="form-section-title">Statement Upload</div>
           <div className="form-field">
-            <label className="form-label">Upload CSV or PDF bank statement</label>
-            <input type="file" accept=".csv,.pdf" onChange={uploadStatement} />
+            <label className="form-label">Upload CSV, Excel or PDF bank statement</label>
+            <input type="file" accept=".csv,.xls,.xlsx,.pdf" onChange={uploadStatement} />
           </div>
           {importStatus && (
             <div className={`import-status import-status-${importStatus}`}>

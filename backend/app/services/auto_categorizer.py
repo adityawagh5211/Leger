@@ -10,10 +10,11 @@ from typing import Any
 
 from ..config import settings
 from .ai_router import ai_router
-from .categorizer import CATEGORIES, EXPENSE_CATEGORIES
+from .categorizer import CATEGORIES, EXPENSE_CATEGORIES, extract_upi_merchant, is_generic_upi
 from .categorizer import categorize as rule_categorize
 
 logger = logging.getLogger("ledger.autocategorize")
+_merchant_cache: dict[str, dict[str, Any]] = {}
 
 CATEGORIZE_SYSTEM = """You are a financial transaction categorizer for an Indian personal finance app.
 Given a transaction description, classify it into EXACTLY one of these categories:
@@ -49,8 +50,21 @@ async def categorize_single(description: str, tx_type: str = "expense") -> dict[
             "source": "rules",
         }
 
-    # 2. If rules returned "Other", try LLM
-    if not settings.anthropic_api_key:
+    merchant_key = (extract_upi_merchant(description) or description).strip().lower()
+    if merchant_key in _merchant_cache:
+        return {**_merchant_cache[merchant_key], "source": "cache"}
+
+    # 2. If rules returned "Other" for generic UPI text, try configured AI providers.
+    has_provider = any(
+        [
+            settings.groq_api_key,
+            settings.cerebras_api_key,
+            settings.gemini_api_key,
+            settings.cohere_api_key,
+            settings.openrouter_api_key,
+        ]
+    )
+    if not has_provider or not is_generic_upi(description, rule_result):
         return {
             "category": "Other",
             "confidence": 0.1,
@@ -73,12 +87,19 @@ async def categorize_single(description: str, tx_type: str = "expense") -> dict[
         category = result.get("category", "Other")
         if category not in CATEGORIES:
             category = "Other"
-        return {
+        response = {
             "category": category,
             "confidence": min(1.0, max(0.0, float(result.get("confidence", 0.5)))),
             "merchant": result.get("merchant"),
             "source": "llm",
         }
+        if response["merchant"]:
+            _merchant_cache[merchant_key] = {
+                "category": response["category"],
+                "confidence": response["confidence"],
+                "merchant": response["merchant"],
+            }
+        return response
     except Exception as e:
         logger.warning("LLM categorization failed for '%s': %s", description[:50], e)
         return {
@@ -108,11 +129,27 @@ async def categorize_batch(transactions: list[dict]) -> list[dict[str, Any]]:
                 "confidence": 0.95,
                 "merchant": None,
             }
-        else:
+        elif is_generic_upi(tx["description"], rule_result):
             needs_llm.append(tx)
+        else:
+            results[tx["id"]] = {
+                "id": tx["id"],
+                "category": "Other",
+                "confidence": 0.1,
+                "merchant": extract_upi_merchant(tx["description"]),
+            }
 
     # If nothing needs LLM or LLM unavailable, return early
-    if not needs_llm or not settings.anthropic_api_key:
+    has_provider = any(
+        [
+            settings.groq_api_key,
+            settings.cerebras_api_key,
+            settings.gemini_api_key,
+            settings.cohere_api_key,
+            settings.openrouter_api_key,
+        ]
+    )
+    if not needs_llm or not has_provider:
         for tx in needs_llm:
             results[tx["id"]] = {
                 "id": tx["id"],

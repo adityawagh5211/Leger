@@ -1,5 +1,5 @@
 import React from "react";
-import { apiFetch, money } from "../lib";
+import { API_BASE, apiFetch, authHeaders, money } from "../lib";
 import { useToast } from "../components/ui";
 import {
   Download, FileText, FileJson, FileSpreadsheet,
@@ -22,8 +22,8 @@ export default function ExportGST() {
   async function handleExport(fmt) {
     setExporting(fmt);
     try {
-      const res = await fetch(`http://127.0.0.1:8000/export/${fmt}`, {
-        headers: { Authorization: `Bearer dev-user` },
+      const res = await fetch(`${API_BASE}/export/${fmt}`, {
+        headers: authHeaders(),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: "Export failed" }));

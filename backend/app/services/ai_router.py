@@ -11,6 +11,22 @@ from ..config import settings
 
 logger = logging.getLogger("ledger.ai_router")
 
+
+class AIProviderAuthError(RuntimeError):
+    def __init__(self, provider: str, status_code: int | None, detail: str):
+        self.provider = provider
+        self.status_code = status_code
+        super().__init__(f"{provider} authentication failed ({status_code or 'unknown'}): {detail}")
+
+
+def _status_code(exc: Exception) -> int | None:
+    status = getattr(exc, "status_code", None)
+    if status:
+        return int(status)
+    response = getattr(exc, "response", None)
+    status = getattr(response, "status_code", None)
+    return int(status) if status else None
+
 class GroqAdapter:
     """Calls Groq API using official SDK."""
     async def is_available(self) -> bool:
@@ -181,12 +197,20 @@ class AIRouter:
                     return # Successfully completed the stream, stop fallback
                     
                 except Exception as e:
-                    logger.warning(f"{name} adapter failed: {e}")
-                    last_error = e
+                    status = _status_code(e)
+                    if status in (401, 403):
+                        logger.error("%s adapter authentication failed status=%s error=%s", name, status, e)
+                        last_error = AIProviderAuthError(name, status, str(e))
+                    else:
+                        logger.warning("%s adapter failed status=%s error=%s", name, status, e)
+                        last_error = e
                     continue
 
         if last_error:
-            yield f"\\n[AI Service Error: All providers failed. Last error: {str(last_error)}]"
+            if isinstance(last_error, AIProviderAuthError):
+                yield "\n[AI Service Error: AI provider authentication failed. Check the configured API keys.]"
+            else:
+                yield f"\\n[AI Service Error: All providers failed. Last error: {str(last_error)}]"
         else:
             yield "\\n[AI Service Error: No API keys configured.]"
 

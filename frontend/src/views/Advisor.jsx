@@ -1,5 +1,5 @@
 import React from "react";
-import { API_BASE, apiFetch, money, CATEGORY_COLORS } from "../lib";
+import { API_BASE, apiFetch, authHeaders } from "../lib";
 import { useToast } from "../components/ui";
 import { Sparkles, Send } from "lucide-react";
 
@@ -66,12 +66,11 @@ export default function Advisor() {
     setMessages((m) => [...m, { role: "assistant", text: "" }]);
 
     try {
-      const token = localStorage.getItem("ledger_token") || "dev-user";
       const body = JSON.stringify({ question: q, conversation_id: activeId || undefined });
 
       const res = await fetch(`${API_BASE}/advisor/stream`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        headers: authHeaders({ "Content-Type": "application/json" }),
         body,
       });
 
