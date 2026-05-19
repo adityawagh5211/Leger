@@ -52,7 +52,7 @@ Used when local LLM is unavailable or for high-quality conversations:
 | Key | `ANTHROPIC_API_KEY` |
 
 ### Used For
-- AI Advisor conversations (SSE streaming)
+- Amadeus AI conversations (SSE streaming)
 - Complex multi-step reasoning
 - Fallback for local LLM failures
 

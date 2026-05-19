@@ -19,7 +19,7 @@ and get AI-powered financial insights — all with local-first privacy.
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                        FRONTEND (Vite + React)                      │
-│  Dashboard │ Transactions │ Budgets │ Investments │ AI Advisor      │
+│  Dashboard │ Transactions │ Budgets │ Investments │ Amadeus AI      │
 │  Accounts  │ Credit Health│ Export  │ Audit/Webhooks│ Command (⌘K)  │
 └───────────────────────────────┬─────────────────────────────────────┘
                                 │ REST + SSE
@@ -58,8 +58,8 @@ and get AI-powered financial insights — all with local-first privacy.
 | Category | Features |
 |---|---|
 | **Core** | Transactions, multi-account management, budgets & goals, recurring payment detection |
-| **AI** | Auto-categorization (rules + LLM), proactive insights, AI chat advisor (SSE), receipt OCR, bill negotiation |
-| **Analytics** | Dashboard KPIs, category breakdowns, credit health score (300-900), community benchmarks |
+| **AI** | Auto-categorization (rules + LLM), proactive insights, Amadeus AI chat (SSE), receipt OCR, bill negotiation |
+| **Analytics** | Dashboard KPIs (w/ time filters), category breakdowns, credit health score (300-900), community benchmarks |
 | **Investments** | Portfolio tracking (stocks/MF/crypto/FD/gold), holdings with live P&L |
 | **Compliance** | GST computation (Indian tax), audit logging, webhook integrations, Tally XML export |
 | **Platform** | PWA offline support, command palette (⌘K), data export (CSV/JSON/Tally) |
@@ -131,7 +131,7 @@ LLAMA_MODEL_PATH="C:\absolute\path\to\qwen2.5-1.5b-instruct-q4_k_m.gguf"
 | `SUPABASE_JWKS_URL` | If Supabase | — | Supabase JWKS URL for JWT verification |
 | `FIREBASE_PROJECT_ID` | If Firebase | — | Firebase project ID for JWT verification |
 | `REDIS_URL` | No | `redis://localhost:6379/0` | Redis URL for caching |
-| `ADVISOR_RATE_LIMIT` | No | `10/minute` | Rate limit for AI advisor endpoint |
+| `ADVISOR_RATE_LIMIT` | No | `10/minute` | Rate limit for Amadeus AI endpoint |
 | `DEBUG` | No | `false` | Enable debug logging |
 
 > ⚠️ **Production:** `AUTH_PROVIDER=dev` is **blocked** in `ENVIRONMENT=production`. The app will refuse to start.
@@ -168,7 +168,7 @@ LLAMA_MODEL_PATH="C:\absolute\path\to\qwen2.5-1.5b-instruct-q4_k_m.gguf"
 | `POST` | `/receipt/scan` | Receipt OCR |
 | `GET` | `/insights/proactive` | AI-generated insights |
 | `GET` | `/bills/negotiate` | Bill negotiation advice |
-| `POST` | `/advisor` | AI chat (SSE streaming) |
+| `POST` | `/advisor` | Amadeus AI chat (SSE streaming) |
 | **Analytics** | | |
 | `GET` | `/summary` | Monthly summary |
 | `GET` | `/credit-health` | Credit health score |
@@ -234,7 +234,7 @@ ledger/
 │   │       ├── Dashboard.jsx
 │   │       ├── Transactions.jsx
 │   │       ├── Budgets.jsx
-│   │       ├── Advisor.jsx
+│   │       ├── Advisor.jsx           # Amadeus AI View
 │   │       ├── Accounts.jsx
 │   │       ├── Investments.jsx
 │   │       ├── CreditBenchmarks.jsx

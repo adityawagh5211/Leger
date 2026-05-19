@@ -19,3 +19,6 @@ cerebras-cloud-sdk==1.5.0
 openai==1.51.0
 mistralai==1.0.3
 cohere==5.11.0
+# Document Processing
+paddleocr==3.5.0
+pytesseract==0.3.13
