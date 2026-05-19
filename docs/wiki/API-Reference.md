@@ -3,6 +3,11 @@
 Base URL: `http://127.0.0.1:8000`  
 Auth: `Authorization: Bearer <token>` on all endpoints.
 
+## Health & Status
+| Method | Endpoint | Body | Response |
+|---|---|---|---|
+| `GET` | `/health` | — | `{"ok": true, "version": "2.0.0"}` |
+
 ## Transactions
 | Method | Endpoint | Body | Response |
 |---|---|---|---|
