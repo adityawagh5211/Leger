@@ -6,29 +6,25 @@ import {
   BarChart3, PiggyBank, Bitcoin, Landmark, Award,
 } from "lucide-react";
 
-const TYPE_ICONS = {
-  stocks: <BarChart3 size={20} />,
-  mutual_funds: <PiggyBank size={20} />,
-  crypto: <Bitcoin size={20} />,
-  fixed_deposit: <Landmark size={20} />,
-  gold: <Award size={20} />,
-};
-const TYPE_COLORS = {
-  stocks: "#3b82f6", mutual_funds: "#10b981", crypto: "#f59e0b",
-  fixed_deposit: "#6366f1", gold: "#eab308",
+const TYPE_META = {
+  stocks:       { Icon: BarChart3,  color: "#4f46e5", bg: "#eff6ff",  label: "Stocks" },
+  mutual_funds: { Icon: PiggyBank,  color: "#10b981", bg: "#ecfdf5",  label: "Mutual Funds" },
+  crypto:       { Icon: Bitcoin,    color: "#f59e0b", bg: "#fffbeb",  label: "Crypto" },
+  fixed_deposit:{ Icon: Landmark,   color: "#6366f1", bg: "#eef2ff",  label: "Fixed Deposit" },
+  gold:         { Icon: Award,      color: "#eab308", bg: "#fefce8",  label: "Gold" },
 };
 
 export default function Investments() {
   const toast = useToast();
   const [portfolios, setPortfolios] = React.useState([]);
-  const [summary, setSummary] = React.useState(null);
-  const [loading, setLoading] = React.useState(true);
-  const [showForm, setShowForm] = React.useState(false);
-  const [form, setForm] = React.useState({ name: "", portfolio_type: "stocks" });
-  const [selected, setSelected] = React.useState(null);
-  const [holdings, setHoldings] = React.useState([]);
+  const [summary,    setSummary]    = React.useState(null);
+  const [loading,    setLoading]    = React.useState(true);
+  const [showForm,   setShowForm]   = React.useState(false);
+  const [form, setForm]     = React.useState({ name: "", portfolio_type: "stocks" });
+  const [selected, setSelected]     = React.useState(null);
+  const [holdings,  setHoldings]    = React.useState([]);
   const [holdingForm, setHoldingForm] = React.useState(null);
-  const [saving, setSaving] = React.useState(false);
+  const [saving,    setSaving]      = React.useState(false);
 
   async function load() {
     try {
@@ -46,9 +42,8 @@ export default function Investments() {
 
   async function selectPortfolio(p) {
     setSelected(p);
-    try {
-      setHoldings(await apiFetch(`/portfolios/${p.id}/holdings`));
-    } catch (e) { toast(e.message, "error"); }
+    try { setHoldings(await apiFetch(`/portfolios/${p.id}/holdings`)); }
+    catch (e) { toast(e.message, "error"); }
   }
 
   async function createPortfolio(e) {
@@ -82,8 +77,8 @@ export default function Investments() {
         method: "POST",
         body: JSON.stringify({
           ...holdingForm,
-          quantity: Number(holdingForm.quantity),
-          buy_price: Number(holdingForm.buy_price),
+          quantity:      Number(holdingForm.quantity),
+          buy_price:     Number(holdingForm.buy_price),
           current_price: Number(holdingForm.current_price || 0),
         }),
       });
@@ -105,25 +100,34 @@ export default function Investments() {
   }
 
   const pnlColor = (v) => v >= 0 ? "var(--positive)" : "var(--negative)";
-  const pnlIcon = (v) => v >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />;
 
   return (
     <div className="view-investments">
-      <div className="page-title-block">
-        <h1 className="page-title">Investments</h1>
-        <p className="page-subtitle">Track your portfolio, holdings, and returns</p>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, marginBottom: 32 }}>
+        <div>
+          <h1 className="page-title">Investments</h1>
+          <p className="page-subtitle" style={{ marginBottom: 0 }}>Track your portfolio, holdings, and returns</p>
+        </div>
+        <button className="btn-primary" onClick={() => setShowForm(!showForm)}>
+          <Plus size={16} /> New Portfolio
+        </button>
       </div>
 
-      {/* Summary cards */}
+      {/* Summary */}
       {summary && (
-        <div className="account-grid" style={{ marginBottom: 20 }}>
-          <div className="card hero-card">
-            <div className="hero-label"><Briefcase size={15} /> Total Invested</div>
+        <div className="account-grid" style={{ marginBottom: 24 }}>
+          <div className="card hero-card" style={{ gridColumn: 'span 2', padding: '32px' }}>
+            <div className="hero-label"><Briefcase size={16} /> Total Invested</div>
             <div className="hero-amount">{money(summary.total_invested)}</div>
-            <div className="hero-change muted">{summary.portfolio_count} portfolios</div>
+            <div className="hero-change muted" style={{ color: 'var(--text-secondary)' }}>
+              {summary.portfolio_count} portfolio{summary.portfolio_count !== 1 ? "s" : ""}
+            </div>
           </div>
-          <div className="card hero-card">
-            <div className="hero-label">{pnlIcon(summary.total_pnl)} Current Value</div>
+          <div className="card hero-card" style={{ gridColumn: 'span 2', padding: '32px' }}>
+            <div className="hero-label">
+              {summary.total_pnl >= 0 ? <TrendingUp size={16} style={{ color: 'var(--positive)' }} /> : <TrendingDown size={16} style={{ color: 'var(--negative)' }} />}
+              Current Value
+            </div>
             <div className="hero-amount">{money(summary.total_current)}</div>
             <div className={`hero-change ${summary.total_pnl >= 0 ? "positive" : "negative"}`}>
               {summary.total_pnl >= 0 ? "+" : ""}{money(summary.total_pnl)} ({summary.total_pnl_pct}%)
@@ -132,38 +136,55 @@ export default function Investments() {
         </div>
       )}
 
-      {/* Portfolio list */}
-      <div className="portfolio-grid" style={{ marginBottom: 20 }}>
-        {portfolios.map(p => (
-          <button
-            key={p.id}
-            className={`card portfolio-card${selected?.id === p.id ? " selected" : ""}`}
-            onClick={() => selectPortfolio(p)}
-          >
-            <div className="portfolio-card-top">
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div className="account-type-icon" style={{ color: TYPE_COLORS[p.portfolio_type] }}>
-                  {TYPE_ICONS[p.portfolio_type]}
-                </div>
-                <div>
-                  <div className="account-detail-name">{p.name}</div>
-                  <div className="account-detail-type">{p.portfolio_type.replace(/_/g, " ")}</div>
-                </div>
-              </div>
-              <button className="tx-delete-btn" onClick={(e) => { e.stopPropagation(); deletePortfolio(p.id); }}>
-                <Trash2 size={13} />
-              </button>
+      {/* Portfolio grid */}
+      <div className="portfolio-grid" style={{ marginBottom: 24 }}>
+        {loading ? (
+          Array.from({ length: 3 }).map((_, i) => (
+            <div className="card" key={i} style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 24 }}>
+              <div className="skeleton" style={{ height: 14, width: '60%', borderRadius: 6 }} />
+              <div className="skeleton" style={{ height: 28, width: '80%', borderRadius: 6 }} />
             </div>
-          </button>
-        ))}
+          ))
+        ) : portfolios.length === 0 ? (
+          <div className="card" style={{ textAlign: 'center', padding: '48px 24px', gridColumn: '1 / -1' }}>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>📊</div>
+            <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>No portfolios yet</div>
+            <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>Create your first portfolio to track investments</div>
+          </div>
+        ) : (
+          portfolios.map(p => {
+            const meta = TYPE_META[p.portfolio_type] || TYPE_META.stocks;
+            const IconComp = meta.Icon;
+            return (
+              <button
+                key={p.id}
+                className={`card portfolio-card${selected?.id === p.id ? " selected" : ""}`}
+                onClick={() => selectPortfolio(p)}
+                style={{ borderTop: `3px solid ${meta.color}`, textAlign: 'left' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ width: 44, height: 44, borderRadius: 12, background: meta.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: meta.color, flexShrink: 0 }}>
+                      <IconComp size={22} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>{p.name}</div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: meta.color, marginTop: 2 }}>{meta.label}</div>
+                    </div>
+                  </div>
+                  <button className="tx-delete-btn" onClick={(e) => { e.stopPropagation(); deletePortfolio(p.id); }}>
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </button>
+            );
+          })
+        )}
       </div>
 
-      {!showForm ? (
-        <button className="btn-primary" onClick={() => setShowForm(true)} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 20 }}>
-          <Plus size={14} /> Add Portfolio
-        </button>
-      ) : (
-        <div className="card" style={{ marginBottom: 20 }}>
+      {/* Create form */}
+      {showForm && (
+        <div className="card" style={{ marginBottom: 24 }}>
           <div className="form-section-title">New Portfolio</div>
           <form onSubmit={createPortfolio}>
             <div className="form-grid-2">
@@ -183,8 +204,8 @@ export default function Investments() {
                 </select>
               </div>
             </div>
-            <div className="form-actions">
-              <button type="submit" className="btn-primary" disabled={saving}>{saving ? "Creating…" : "Create"}</button>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button type="submit" className="btn-primary" disabled={saving}>{saving ? "Creating…" : "Create Portfolio"}</button>
               <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
             </div>
           </form>
@@ -194,36 +215,48 @@ export default function Investments() {
       {/* Holdings */}
       {selected && (
         <div className="card">
-          <div className="form-section-title">{selected.name} — Holdings</div>
-          {holdings.length === 0 ? (
-            <div className="empty-state" style={{ padding: "30px 0" }}>
-              <div className="empty-state-icon">📊</div>
-              <div className="empty-state-title">No holdings yet</div>
-              <div className="empty-state-sub">Add your first investment</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+            <div className="chart-title">{selected.name} — Holdings</div>
+            {!holdingForm && (
+              <button className="btn-primary" style={{ fontSize: 14, padding: '8px 16px' }}
+                onClick={() => setHoldingForm({ symbol: "", name: "", quantity: "", buy_price: "", current_price: "", asset_type: "equity" })}>
+                <Plus size={14} /> Add Holding
+              </button>
+            )}
+          </div>
+
+          {holdings.length === 0 && !holdingForm ? (
+            <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
+              <div style={{ fontSize: 32, marginBottom: 8 }}>📈</div>
+              <div style={{ fontWeight: 600 }}>No holdings yet</div>
             </div>
           ) : (
-            <div className="gst-table-wrap" style={{ marginBottom: 16 }}>
-              <table className="gst-table">
+            <div style={{ overflowX: 'auto', marginBottom: holdingForm ? 24 : 0 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
                 <thead>
-                  <tr>
-                    <th>Symbol</th><th>Name</th><th>Qty</th><th>Buy Price</th><th>Current</th><th>P&L</th><th></th>
+                  <tr style={{ background: 'var(--bg)', borderRadius: 8 }}>
+                    {['Symbol', 'Name', 'Qty', 'Buy Price', 'Current', 'P&L', ''].map(h => (
+                      <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
                   {holdings.map(h => {
-                    const pnl = (Number(h.current_price) - Number(h.buy_price)) * Number(h.quantity);
+                    const pnl    = (Number(h.current_price) - Number(h.buy_price)) * Number(h.quantity);
                     const pnlPct = Number(h.buy_price) > 0 ? ((Number(h.current_price) - Number(h.buy_price)) / Number(h.buy_price) * 100).toFixed(1) : 0;
                     return (
-                      <tr key={h.id}>
-                        <td><strong>{h.symbol}</strong></td>
-                        <td>{h.name}</td>
-                        <td>{Number(h.quantity)}</td>
-                        <td>{money(h.buy_price)}</td>
-                        <td>{money(h.current_price)}</td>
-                        <td style={{ color: pnlColor(pnl), fontWeight: 600 }}>
-                          {pnl >= 0 ? "+" : ""}{money(pnl)} ({pnlPct}%)
+                      <tr key={h.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                        <td style={{ padding: '14px 16px', fontWeight: 700 }}>{h.symbol}</td>
+                        <td style={{ padding: '14px 16px', color: 'var(--text-secondary)' }}>{h.name}</td>
+                        <td style={{ padding: '14px 16px' }}>{Number(h.quantity)}</td>
+                        <td style={{ padding: '14px 16px' }}>{money(h.buy_price)}</td>
+                        <td style={{ padding: '14px 16px', fontWeight: 600 }}>{money(h.current_price)}</td>
+                        <td style={{ padding: '14px 16px', color: pnlColor(pnl), fontWeight: 700 }}>
+                          <span style={{ background: pnl >= 0 ? '#ecfdf5' : '#fff1f2', padding: '4px 10px', borderRadius: 8 }}>
+                            {pnl >= 0 ? "+" : ""}{money(pnl)} ({pnlPct}%)
+                          </span>
                         </td>
-                        <td>
+                        <td style={{ padding: '14px 16px' }}>
                           <button className="tx-delete-btn" onClick={() => deleteHolding(h.id)}><Trash2 size={13} /></button>
                         </td>
                       </tr>
@@ -234,12 +267,9 @@ export default function Investments() {
             </div>
           )}
 
-          {!holdingForm ? (
-            <button className="btn-primary" onClick={() => setHoldingForm({ symbol: "", name: "", quantity: "", buy_price: "", current_price: "", asset_type: "equity" })} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <Plus size={14} /> Add Holding
-            </button>
-          ) : (
-            <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16, marginTop: 8 }}>
+          {holdingForm && (
+            <div style={{ borderTop: holdings.length ? '1px solid var(--border)' : 'none', paddingTop: holdings.length ? 24 : 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 20 }}>New Holding</div>
               <form onSubmit={addHolding}>
                 <div className="form-grid-2">
                   <div className="form-field">
@@ -272,16 +302,19 @@ export default function Investments() {
                       onChange={e => setHoldingForm({ ...holdingForm, current_price: e.target.value })} />
                   </div>
                   <div className="form-field">
-                    <label className="form-label">Type</label>
+                    <label className="form-label">Asset Type</label>
                     <select value={holdingForm.asset_type} onChange={e => setHoldingForm({ ...holdingForm, asset_type: e.target.value })}>
-                      <option value="equity">Equity</option><option value="mf">Mutual Fund</option>
-                      <option value="etf">ETF</option><option value="crypto">Crypto</option>
-                      <option value="fd">FD</option><option value="gold">Gold</option>
+                      <option value="equity">Equity</option>
+                      <option value="mf">Mutual Fund</option>
+                      <option value="etf">ETF</option>
+                      <option value="crypto">Crypto</option>
+                      <option value="fd">FD</option>
+                      <option value="gold">Gold</option>
                     </select>
                   </div>
                 </div>
-                <div className="form-actions">
-                  <button type="submit" className="btn-primary" disabled={saving}>{saving ? "Adding…" : "Add"}</button>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <button type="submit" className="btn-primary" disabled={saving}>{saving ? "Adding…" : "Add Holding"}</button>
                   <button type="button" className="btn-secondary" onClick={() => setHoldingForm(null)}>Cancel</button>
                 </div>
               </form>

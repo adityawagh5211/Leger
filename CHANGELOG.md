@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] - 2026-05-19
+
+### Changed
+- Overhauled global design system to a premium light theme with refined typography (Inter & Outfit).
+- Restructured navigation: 6 primary tabs + "More" dropdown on Desktop, 5 tabs + Menu drawer on Mobile.
+- Added a prominent central "+" (Add) button in the mobile bottom navigation bar and removed the floating action button.
+- Re-designed the logo icon to a sleek geometric hexagon and cleaned up navigation brand text.
+- Redesigned the Auth screen with glassmorphism styling and immersive gradient background.
+- Refined Dashboard KPI cards, custom chart tooltips, and budget progress indicators.
+
 ## [1.0.1] - 2026-05-19
 
 ### Added

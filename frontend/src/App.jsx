@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { supabase } from "./supabase";
 import { apiFetch, EXPENSE_CATEGORIES, setAuthToken, today } from "./lib";
 import { useToast } from "./components/ui";
@@ -15,21 +15,26 @@ import CreditBenchmarks from "./views/CreditBenchmarks";
 import CommandPalette from "./components/CommandPalette";
 import {
   LayoutDashboard, Plus, Target, BarChart3, Sparkles,
-  Wallet, Download, Shield, Command, Briefcase, Gauge, LogOut, Loader2, X
+  Wallet, Download, Shield, Command, Briefcase, Gauge, LogOut, Loader2, X, MoreHorizontal, Grid
 } from "lucide-react";
 
-const VIEWS = [
+const PRIMARY_VIEWS = [
   { id: "dashboard",    label: "Dashboard",       Icon: LayoutDashboard },
   { id: "transactions", label: "Transactions",    Icon: Plus },
   { id: "budgets",      label: "Budgets",         Icon: Target },
-  { id: "analytics",    label: "Analytics",       Icon: BarChart3 },
-  { id: "accounts",     label: "Accounts",        Icon: Wallet },
   { id: "investments",  label: "Investments",     Icon: Briefcase },
   { id: "credit",       label: "Health",          Icon: Gauge },
-  { id: "export",       label: "Export",          Icon: Download },
-  { id: "audit",        label: "Audit",           Icon: Shield },
   { id: "advisor",      label: "Amadeus AI",      Icon: Sparkles },
 ];
+
+const SECONDARY_VIEWS = [
+  { id: "accounts",     label: "Accounts",        Icon: Wallet },
+  { id: "analytics",    label: "Analytics",       Icon: BarChart3 },
+  { id: "export",       label: "Export & GST",    Icon: Download },
+  { id: "audit",        label: "Audit Logs",      Icon: Shield },
+];
+
+const ALL_VIEWS = [...PRIMARY_VIEWS, ...SECONDARY_VIEWS];
 
 function clearSupabaseStorage() {
   if (typeof window === "undefined") return;
@@ -43,9 +48,22 @@ export default function App() {
   const [view, setView] = useState("dashboard");
   const [cmdOpen, setCmdOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [moreDrawerOpen, setMoreDrawerOpen] = useState(false);
+  const [moreDropdownOpen, setMoreDropdownOpen] = useState(false);
   const [session, setSession] = useState(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
-  const touchStart = React.useRef(null);
+  const touchStart = useRef(null);
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setMoreDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   useEffect(() => {
     supabase.auth.getSession()
@@ -101,13 +119,14 @@ export default function App() {
   }
 
   function navigateBy(delta) {
-    const index = VIEWS.findIndex((item) => item.id === view);
-    const next = VIEWS[Math.max(0, Math.min(VIEWS.length - 1, index + delta))];
+    const index = ALL_VIEWS.findIndex((item) => item.id === view);
+    if (index === -1) return;
+    const next = ALL_VIEWS[Math.max(0, Math.min(ALL_VIEWS.length - 1, index + delta))];
     if (next && next.id !== view) setView(next.id);
   }
 
   function onPointerDown(e) {
-    if (e.pointerType === "mouse" || sheetOpen) return;
+    if (e.pointerType === "mouse" || sheetOpen || moreDrawerOpen) return;
     touchStart.current = { x: e.clientX, y: e.clientY };
   }
 
@@ -121,10 +140,16 @@ export default function App() {
     }
   }
 
+  function navigateTo(id) {
+    setView(id);
+    setMoreDrawerOpen(false);
+    setMoreDropdownOpen(false);
+  }
+
   if (loadingAuth) {
     return (
-      <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center' }}>
-        <Loader2 size={32} className="spin text-secondary" />
+      <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
+        <Loader2 size={32} className="spin" style={{ color: 'var(--accent)' }} />
       </div>
     );
   }
@@ -133,17 +158,17 @@ export default function App() {
     return <Auth />;
   }
 
+  const isSecondaryActive = SECONDARY_VIEWS.some(v => v.id === view);
+
   return (
     <div className="app">
       <header className="app-header">
         <div className="app-header-inner">
           <div className="logo">
             <div className="logo-icon">
-              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                <rect x="2" y="2" width="7" height="7" rx="1.5" fill="white"/>
-                <rect x="11" y="2" width="7" height="7" rx="1.5" fill="white"/>
-                <rect x="2" y="11" width="7" height="7" rx="1.5" fill="white"/>
-                <rect x="11" y="11" width="7" height="7" rx="1.5" fill="white"/>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 3L20 7.5V16.5L12 21L4 16.5V7.5L12 3Z" fill="rgba(255,255,255,0.2)" stroke="white"/>
+                <circle cx="12" cy="12" r="3" fill="white" stroke="none"/>
               </svg>
             </div>
             <div>
@@ -152,38 +177,69 @@ export default function App() {
             </div>
           </div>
           <nav className="nav-tabs" role="tablist">
-            {VIEWS.map(({ id, label, Icon }) => (
+            {PRIMARY_VIEWS.map(({ id, label, Icon }) => (
               <button
                 key={id}
                 role="tab"
                 className={`nav-tab${view === id ? " active" : ""}`}
-                onClick={() => setView(id)}
+                onClick={() => navigateTo(id)}
                 aria-selected={view === id}
               >
-                <Icon size={14} aria-hidden="true" />
+                <Icon size={16} aria-hidden="true" />
                 {label}
               </button>
             ))}
+            
+            {/* Desktop More Dropdown */}
+            <div style={{ position: 'relative' }} ref={dropdownRef}>
+              <button
+                className={`nav-tab${isSecondaryActive ? " active" : ""}`}
+                onClick={() => setMoreDropdownOpen(!moreDropdownOpen)}
+              >
+                <MoreHorizontal size={16} /> More
+              </button>
+              {moreDropdownOpen && (
+                <div style={{
+                  position: 'absolute', top: 'calc(100% + 8px)', right: 0,
+                  background: 'var(--surface)', border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-sm)', padding: '8px',
+                  boxShadow: 'var(--shadow-hover)', minWidth: '180px', zIndex: 200
+                }}>
+                  {SECONDARY_VIEWS.map(({ id, label, Icon }) => (
+                    <button
+                      key={id}
+                      className={`nav-tab full-width`}
+                      style={{ justifyContent: 'flex-start', padding: '10px 14px' }}
+                      onClick={() => navigateTo(id)}
+                    >
+                      <Icon size={14} /> {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div style={{ width: 1, height: 24, background: 'var(--border)', margin: '0 8px' }} />
+
             <button
               className="nav-tab cmd-k-btn"
               onClick={() => setCmdOpen(true)}
               title="Command palette (Ctrl+K)"
-              aria-label="Open command palette"
             >
               <Command size={14} />
-              <kbd className="cmd-kbd-nav">⌘K</kbd>
+              <kbd className="cmd-kbd">⌘K</kbd>
             </button>
             <button
               className="nav-tab"
               onClick={handleSignOut}
               title="Sign Out"
             >
-              <LogOut size={14} />
-              Sign Out
+              <LogOut size={16} />
             </button>
           </nav>
         </div>
       </header>
+      
       <main
         className="page-content swipe-shell"
         onPointerDown={onPointerDown}
@@ -191,22 +247,68 @@ export default function App() {
       >
         <div key={view} className="swipe-view">{renderView()}</div>
       </main>
+
       <button className="quick-add-fab" onClick={() => setSheetOpen(true)} aria-label="Add transaction">
-        <Plus size={22} />
+        <Plus size={24} />
       </button>
+
+      {/* Mobile Bottom Nav (5 items with central Add) */}
       <nav className="mobile-bottom-nav" aria-label="Primary mobile navigation">
-        {VIEWS.map(({ id, label, Icon }) => (
-          <button
-            key={id}
-            className={`mobile-nav-item${view === id ? " active" : ""}`}
-            onClick={() => setView(id)}
-            aria-current={view === id ? "page" : undefined}
-          >
-            <Icon size={18} aria-hidden="true" />
-            <span>{label}</span>
-          </button>
-        ))}
+        <button className={`mobile-nav-item${view === 'dashboard' ? " active" : ""}`} onClick={() => navigateTo('dashboard')}>
+          <LayoutDashboard size={20} aria-hidden="true" />
+          <span>Dashboard</span>
+        </button>
+        <button className={`mobile-nav-item${view === 'budgets' ? " active" : ""}`} onClick={() => navigateTo('budgets')}>
+          <Target size={20} aria-hidden="true" />
+          <span>Budgets</span>
+        </button>
+        
+        <button className="mobile-nav-item center-add-btn" onClick={() => setSheetOpen(true)} aria-label="Add transaction">
+          <div className="center-add-icon-wrap">
+            <Plus size={24} aria-hidden="true" />
+          </div>
+          <span>Add</span>
+        </button>
+
+        <button className={`mobile-nav-item${view === 'investments' ? " active" : ""}`} onClick={() => navigateTo('investments')}>
+          <Briefcase size={20} aria-hidden="true" />
+          <span>Investments</span>
+        </button>
+        <button className={`mobile-nav-item${isSecondaryActive || view === "advisor" || view === "credit" || view === "transactions" ? " active" : ""}`} onClick={() => setMoreDrawerOpen(true)}>
+          <Grid size={20} aria-hidden="true" />
+          <span>Menu</span>
+        </button>
       </nav>
+
+      {/* Mobile More Drawer */}
+      <div className={`sheet-backdrop${moreDrawerOpen ? " open" : ""}`} onClick={() => setMoreDrawerOpen(false)} style={{ zIndex: 950 }} />
+      <div className={`bottom-sheet${moreDrawerOpen ? " open" : ""}`} style={{ zIndex: 951 }}>
+        <div className="sheet-handle" />
+        <div className="sheet-header">
+          <div className="form-section-title" style={{ marginBottom: 0 }}>All Features</div>
+          <button className="icon-btn" onClick={() => setMoreDrawerOpen(false)}>
+            <X size={18} />
+          </button>
+        </div>
+        
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
+          {ALL_VIEWS.map(({ id, label, Icon }) => (
+            <button
+              key={id}
+              className={`type-btn${view === id ? " active" : ""}`}
+              style={{ justifyContent: 'flex-start', padding: '16px' }}
+              onClick={() => navigateTo(id)}
+            >
+              <Icon size={18} className={view === id ? 'icon-accent' : ''} /> {label}
+            </button>
+          ))}
+        </div>
+        
+        <button className="btn-secondary full-width" onClick={handleSignOut} style={{ color: 'var(--negative)', borderColor: '#fecdd3' }}>
+          <LogOut size={16} /> Sign Out
+        </button>
+      </div>
+
       <QuickAddSheet
         open={sheetOpen}
         onClose={() => setSheetOpen(false)}
@@ -215,7 +317,7 @@ export default function App() {
           if (view !== "transactions") setView("transactions");
         }}
       />
-      <CommandPalette open={cmdOpen} onClose={handleCmdClose} onNavigate={setView} />
+      <CommandPalette open={cmdOpen} onClose={handleCmdClose} onNavigate={navigateTo} />
     </div>
   );
 }
@@ -257,7 +359,7 @@ function QuickAddSheet({ open, onClose, onSaved }) {
       <section className={`bottom-sheet${open ? " open" : ""}`} aria-hidden={!open}>
         <div className="sheet-handle" />
         <div className="sheet-header">
-          <div className="form-section-title">Quick Transaction</div>
+          <div className="form-section-title" style={{ marginBottom: 0 }}>Add Transaction</div>
           <button className="icon-btn" onClick={onClose} aria-label="Close quick transaction">
             <X size={18} />
           </button>
@@ -273,29 +375,39 @@ function QuickAddSheet({ open, onClose, onSaved }) {
               Income
             </button>
           </div>
+          
+          <div className="form-field" style={{ marginBottom: 24 }}>
+            <label className="form-label" style={{ textAlign: 'center', fontSize: 13, color: 'var(--text-secondary)' }}>Amount</label>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+              <span style={{ fontSize: 32, fontWeight: 700, color: 'var(--text-muted)' }}>₹</span>
+              <input required type="number" min="1" step="0.01" value={form.amount}
+                placeholder="0.00"
+                style={{ fontSize: 40, fontWeight: 700, textAlign: 'center', border: 'none', background: 'transparent', padding: 0, width: '200px', boxShadow: 'none' }}
+                onChange={(e) => setForm({ ...form, amount: e.target.value })} />
+            </div>
+            <div style={{ height: 2, background: 'var(--border)', width: 120, margin: '8px auto 0' }} />
+          </div>
+
           <div className="form-grid-2">
             <div className="form-field">
-              <label className="form-label">Amount</label>
-              <input required type="number" min="1" step="0.01" value={form.amount}
-                onChange={(e) => setForm({ ...form, amount: e.target.value })} />
+              <label className="form-label">Category</label>
+              <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+                {(form.type === "income" ? ["Salary", "Freelance", "Other"] : EXPENSE_CATEGORIES).map((c) => <option key={c}>{c}</option>)}
+              </select>
             </div>
             <div className="form-field">
               <label className="form-label">Date</label>
               <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
             </div>
           </div>
-          <div className="form-field">
+          
+          <div className="form-field" style={{ marginBottom: 32 }}>
             <label className="form-label">Description</label>
-            <input required value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+            <input required placeholder="What was this for?" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
           </div>
-          <div className="form-field">
-            <label className="form-label">Category</label>
-            <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
-              {(form.type === "income" ? ["Salary", "Freelance", "Other"] : EXPENSE_CATEGORIES).map((c) => <option key={c}>{c}</option>)}
-            </select>
-          </div>
-          <button className="btn-primary full-width" disabled={submitting}>
-            {submitting ? "Adding..." : "Add Transaction"}
+          
+          <button className="btn-primary full-width" disabled={submitting} style={{ padding: '16px' }}>
+            {submitting ? "Saving..." : "Save Transaction"}
           </button>
         </form>
       </section>

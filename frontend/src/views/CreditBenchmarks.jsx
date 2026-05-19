@@ -2,28 +2,40 @@ import React from "react";
 import { apiFetch, money } from "../lib";
 import { useToast } from "../components/ui";
 import {
-  TrendingUp, TrendingDown, BarChart3, Users, ArrowUp, ArrowDown,
-  Gauge, Heart, Shield, Zap, Lightbulb, DollarSign,
+  BarChart3, Users, ArrowUp, Gauge, Heart, Shield, Zap, Lightbulb, DollarSign, TrendingUp,
 } from "lucide-react";
 
-/* ─── Credit Health Gauge ──────────────────────── */
 function CreditGauge({ score, grade, color }) {
   const pct = Math.min(100, Math.max(0, ((score - 300) / 600) * 100));
+  const circumference = 2 * Math.PI * 52;
+  const offset = circumference - (circumference * pct) / 100;
+
   return (
     <div className="credit-gauge">
-      <div className="gauge-ring">
-        <svg viewBox="0 0 120 120" width="180" height="180">
-          <circle cx="60" cy="60" r="52" fill="none" stroke="#f1f5f9" strokeWidth="10" strokeDasharray="245" strokeDashoffset="0" transform="rotate(-90 60 60)" />
-          <circle cx="60" cy="60" r="52" fill="none" stroke={color} strokeWidth="10" strokeLinecap="round" strokeDasharray="245" strokeDashoffset={245 - (245 * pct) / 100} transform="rotate(-90 60 60)" style={{ transition: "stroke-dashoffset 1s ease" }} />
+      <div className="gauge-ring" style={{ position: 'relative', display: 'inline-block' }}>
+        <svg viewBox="0 0 120 120" width="200" height="200">
+          {/* Background ring */}
+          <circle cx="60" cy="60" r="52" fill="none" stroke="#e2e8f0" strokeWidth="12"
+            strokeDasharray={circumference} strokeDashoffset="0" transform="rotate(-90 60 60)" />
+          {/* Score ring */}
+          <circle cx="60" cy="60" r="52" fill="none" stroke={color} strokeWidth="12"
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={offset}
+            transform="rotate(-90 60 60)"
+            style={{ transition: 'stroke-dashoffset 1.2s cubic-bezier(0.4, 0, 0.2, 1)', filter: `drop-shadow(0 0 8px ${color}40)` }} />
         </svg>
-        <div className="gauge-center">
+        <div style={{
+          position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+          textAlign: 'center',
+        }}>
           <div className="gauge-score" style={{ color }}>{score}</div>
           <div className="gauge-grade">{grade}</div>
         </div>
       </div>
-      <div className="gauge-range">
-        <span>300</span>
-        <span>900</span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', width: 200, marginTop: 8 }}>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>300</span>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>900</span>
       </div>
     </div>
   );
@@ -31,10 +43,10 @@ function CreditGauge({ score, grade, color }) {
 
 export default function CreditBenchmarks() {
   const toast = useToast();
-  const [tab, setTab] = React.useState("credit");
-  const [credit, setCredit] = React.useState(null);
+  const [tab, setTab]           = React.useState("credit");
+  const [credit, setCredit]     = React.useState(null);
   const [benchmarks, setBenchmarks] = React.useState(null);
-  const [loading, setLoading] = React.useState(true);
+  const [loading, setLoading]   = React.useState(true);
 
   React.useEffect(() => {
     Promise.all([
@@ -43,64 +55,94 @@ export default function CreditBenchmarks() {
     ]).finally(() => setLoading(false));
   }, []);
 
-  const FACTOR_ICONS = { savings: Heart, budget_adherence: Shield, consistency: Zap, diversity: BarChart3, credit_utilization: DollarSign };
+  const FACTOR_ICONS = {
+    savings:           Heart,
+    budget_adherence:  Shield,
+    consistency:       Zap,
+    diversity:         BarChart3,
+    credit_utilization: DollarSign,
+  };
+
+  const TABS = [
+    { id: "credit",     label: "Credit Score",  Icon: Gauge },
+    { id: "benchmarks", label: "Benchmarks",    Icon: Users },
+  ];
 
   return (
     <div className="view-credit">
-      <div className="page-title-block">
+      <div style={{ marginBottom: 32 }}>
         <h1 className="page-title">Financial Health</h1>
-        <p className="page-subtitle">Credit score, spending benchmarks & insights</p>
+        <p className="page-subtitle" style={{ marginBottom: 0 }}>Credit score, spending benchmarks & insights</p>
       </div>
 
-      <div className="type-toggle" style={{ marginBottom: 20 }}>
-        <button className={`type-btn${tab === "credit" ? " active expense" : ""}`} onClick={() => setTab("credit")} style={tab === "credit" ? { borderColor: "var(--accent)", background: "#eff6ff", color: "var(--accent)" } : {}}>
-          <Gauge size={14} style={{ marginRight: 4 }} /> Credit Score
-        </button>
-        <button className={`type-btn${tab === "benchmarks" ? " active income" : ""}`} onClick={() => setTab("benchmarks")}>
-          <Users size={14} style={{ marginRight: 4 }} /> Benchmarks
-        </button>
+      {/* Tab switcher */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 28, background: 'var(--bg)', padding: 4, borderRadius: 12, width: 'fit-content' }}>
+        {TABS.map(({ id, label, Icon }) => (
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '10px 20px', borderRadius: 10, border: 'none', cursor: 'pointer',
+              fontSize: 14, fontWeight: 600, transition: 'all 0.2s',
+              background: tab === id ? 'var(--surface)' : 'transparent',
+              color: tab === id ? 'var(--accent)' : 'var(--text-secondary)',
+              boxShadow: tab === id ? 'var(--shadow)' : 'none',
+            }}
+          >
+            <Icon size={15} /> {label}
+          </button>
+        ))}
       </div>
 
-      {/* Credit Health */}
+      {/* Credit tab */}
       {tab === "credit" && (
         <div>
           {loading || !credit ? (
-            <div className="card"><div className="skeleton" style={{ height: 200, borderRadius: 12 }} /></div>
+            <div className="card">
+              <div className="skeleton" style={{ height: 220, borderRadius: 12 }} />
+            </div>
           ) : (
             <>
-              <div className="card credit-main-card">
+              <div className="card credit-main-card" style={{ marginBottom: 24 }}>
                 <CreditGauge score={credit.score} grade={credit.grade} color={credit.color} />
               </div>
 
-              <div className="account-grid" style={{ marginTop: 20 }}>
+              <div className="account-grid" style={{ marginBottom: 24 }}>
                 {Object.entries(credit.breakdown).map(([key, factor]) => {
                   const Icon = FACTOR_ICONS[key] || Zap;
-                  const pct = Math.round((factor.score / factor.max) * 100);
+                  const pct  = Math.round((factor.score / factor.max) * 100);
+                  const barColor = pct > 70 ? '#10b981' : pct > 40 ? '#f59e0b' : '#f43f5e';
                   return (
                     <div className="card credit-factor-card" key={key}>
                       <div className="credit-factor-top">
-                        <Icon size={16} className="icon-accent" />
-                        <span className="credit-factor-name">{key.replace(/_/g, " ")}</span>
+                        <div style={{ width: 36, height: 36, borderRadius: 10, background: pct > 70 ? '#ecfdf5' : pct > 40 ? '#fffbeb' : '#fff1f2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <Icon size={18} style={{ color: barColor }} />
+                        </div>
+                        <div>
+                          <div className="credit-factor-name">{key.replace(/_/g, " ")}</div>
+                          <div style={{ fontSize: 12, color: barColor, fontWeight: 600, marginTop: 2 }}>{pct}%</div>
+                        </div>
                       </div>
                       <div className="credit-factor-bar-wrap">
-                        <div className="credit-factor-bar" style={{ width: `${pct}%`, background: pct > 70 ? "#16a34a" : pct > 40 ? "#f59e0b" : "#dc2626" }} />
+                        <div className="credit-factor-bar" style={{ width: `${pct}%`, background: barColor }} />
                       </div>
-                      <div className="credit-factor-score">{factor.score}/{factor.max}</div>
+                      <div className="credit-factor-score">{factor.score} / {factor.max} pts</div>
                     </div>
                   );
                 })}
               </div>
 
               {credit.tips.length > 0 && (
-                <div className="card" style={{ marginTop: 20 }}>
-                  <div className="form-section-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <Lightbulb size={16} /> Tips to Improve
+                <div className="card">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20, fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 600 }}>
+                    <Lightbulb size={18} style={{ color: '#f59e0b' }} /> Tips to Improve
                   </div>
-                  <div className="insights-list">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                     {credit.tips.map((tip, i) => (
-                      <div className="insight-item" key={i}>
-                        <ArrowUp size={14} className="icon-positive" />
-                        <p>{tip}</p>
+                      <div key={i} style={{ display: 'flex', gap: 12, padding: '14px 16px', background: '#fffbeb', borderRadius: 12, borderLeft: '3px solid #f59e0b' }}>
+                        <ArrowUp size={15} style={{ color: '#f59e0b', flexShrink: 0, marginTop: 2 }} />
+                        <p style={{ fontSize: 14, margin: 0, lineHeight: 1.6, color: 'var(--text-primary)' }}>{tip}</p>
                       </div>
                     ))}
                   </div>
@@ -111,43 +153,56 @@ export default function CreditBenchmarks() {
         </div>
       )}
 
-      {/* Community Benchmarks */}
+      {/* Benchmarks tab */}
       {tab === "benchmarks" && (
         <div>
           {loading || !benchmarks ? (
             <div className="card"><div className="skeleton" style={{ height: 200, borderRadius: 12 }} /></div>
           ) : (
             <>
-              <div className="card hero-card" style={{ marginBottom: 20 }}>
-                <div className="hero-label"><Users size={15} /> Your Spending Rank</div>
-                <div className="hero-amount">{benchmarks.overall_percentile}th percentile</div>
-                <div className="hero-change muted">
-                  You spend {benchmarks.overall_percentile > 50 ? "more" : "less"} than {benchmarks.overall_percentile}% of users • Median: {money(benchmarks.benchmark_median)}
+              <div className="card hero-card" style={{ marginBottom: 24 }}>
+                <div className="hero-label"><TrendingUp size={16} /> Your Spending Rank</div>
+                <div className="hero-amount">{benchmarks.overall_percentile}th</div>
+                <div className="hero-change muted" style={{ color: 'var(--text-secondary)' }}>
+                  percentile · Median: {money(benchmarks.benchmark_median)}
                 </div>
               </div>
 
               <div className="card">
-                <div className="form-section-title">Category Comparison</div>
-                <div className="benchmark-list">
-                  {benchmarks.categories.map(cat => (
-                    <div className="benchmark-row" key={cat.category}>
-                      <div className="benchmark-row-left">
-                        <span className="benchmark-cat">{cat.category}</span>
-                        <span className="benchmark-spend">{money(cat.your_spend)}</span>
-                      </div>
-                      <div className="benchmark-bar-wrap">
-                        <div className={`benchmark-bar benchmark-${cat.status}`} style={{ width: `${Math.min(100, cat.percentile)}%` }} />
-                        <div className="benchmark-median-mark" style={{ left: "50%" }} />
-                      </div>
-                      <div className="benchmark-row-right">
-                        <span className={`benchmark-badge benchmark-${cat.status}`}>{cat.label}</span>
-                        <span className="benchmark-pct">P{cat.percentile}</span>
-                      </div>
-                    </div>
-                  ))}
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 600, marginBottom: 24, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Users size={18} style={{ color: 'var(--accent)' }} /> Category Comparison
                 </div>
-                <div className="benchmark-footer">
-                  Based on {benchmarks.sample_size} urban users • {benchmarks.methodology}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                  {benchmarks.categories.map(cat => {
+                    const STATUS_COLORS = {
+                      low:     { bar: '#10b981', badge: { bg: '#ecfdf5', color: '#059669' } },
+                      good:    { bar: '#4f46e5', badge: { bg: '#eff6ff', color: '#4338ca' } },
+                      average: { bar: '#f59e0b', badge: { bg: '#fffbeb', color: '#b45309' } },
+                      high:    { bar: '#f43f5e', badge: { bg: '#fff1f2', color: '#be123c' } },
+                    };
+                    const sc = STATUS_COLORS[cat.status] || STATUS_COLORS.average;
+                    return (
+                      <div key={cat.category}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                          <div>
+                            <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>{cat.category}</span>
+                            <span style={{ fontSize: 13, color: 'var(--text-muted)', marginLeft: 8 }}>{money(cat.your_spend)}</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <span style={{ ...sc.badge, padding: '3px 12px', borderRadius: 99, fontSize: 12, fontWeight: 700 }}>{cat.label}</span>
+                            <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>P{cat.percentile}</span>
+                          </div>
+                        </div>
+                        <div style={{ height: 8, background: 'var(--bg)', borderRadius: 99, overflow: 'hidden', position: 'relative' }}>
+                          <div style={{ height: '100%', width: `${Math.min(100, cat.percentile)}%`, background: sc.bar, borderRadius: 99, transition: 'width 0.6s ease' }} />
+                          <div style={{ position: 'absolute', top: -3, left: '50%', width: 2, height: 14, background: 'var(--text-muted)', borderRadius: 1, transform: 'translateX(-1px)' }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid var(--border)', fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', fontWeight: 500 }}>
+                  Based on {benchmarks.sample_size} urban users · {benchmarks.methodology}
                 </div>
               </div>
             </>

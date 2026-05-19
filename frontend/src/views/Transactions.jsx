@@ -1,37 +1,36 @@
 import React from "react";
 import { apiFetch, KEYS, money, today, EXPENSE_CATEGORIES, CATEGORY_COLORS } from "../lib";
 import { useToast } from "../components/ui";
-import { Trash2, Upload, Search, Filter } from "lucide-react";
+import { Trash2, Upload, Search, FileText, MessageSquare, PlusCircle } from "lucide-react";
 
 const PAGE = 50;
 
 export default function Transactions() {
   const toast = useToast();
   const [transactions, setTransactions] = React.useState([]);
-  const [loading, setLoading] = React.useState(true);
-  const [submitting, setSubmitting] = React.useState(false);
-  const [importing, setImporting] = React.useState(false);
-  const [nextCursor, setNextCursor] = React.useState(null);
-  const [hasMore, setHasMore] = React.useState(false);
-  const [search, setSearch] = React.useState("");
-  const [filterCat, setFilterCat] = React.useState("");
-  const [filterType, setFilterType] = React.useState("");
-  const [smsText, setSmsText] = React.useState("");
-  const [importJobId, setImportJobId] = React.useState(null);
+  const [loading, setLoading]           = React.useState(true);
+  const [submitting, setSubmitting]     = React.useState(false);
+  const [importing, setImporting]       = React.useState(false);
+  const [nextCursor, setNextCursor]     = React.useState(null);
+  const [hasMore, setHasMore]           = React.useState(false);
+  const [search, setSearch]             = React.useState("");
+  const [filterCat, setFilterCat]       = React.useState("");
+  const [filterType, setFilterType]     = React.useState("");
+  const [smsText, setSmsText]           = React.useState("");
   const [importStatus, setImportStatus] = React.useState(null);
+  const [activeTab, setActiveTab]       = React.useState("manual"); // manual | sms | statement
 
   const [form, setForm] = React.useState({
     type: "expense", amount: "", category: "Groceries",
     description: "", date: today(), source: "cash",
   });
 
-  // ── Load transactions ──────────────────────────────────────────────────────
   const loadTransactions = React.useCallback(async (reset = true) => {
     setLoading(true);
     try {
       const params = new URLSearchParams({ limit: PAGE });
-      if (search) params.set("search", search);
-      if (filterCat) params.set("category", filterCat);
+      if (search)     params.set("search", search);
+      if (filterCat)  params.set("category", filterCat);
       if (filterType) params.set("type", filterType);
       if (!reset && nextCursor) params.set("cursor", nextCursor);
       const data = await apiFetch(`/transactions?${params}`);
@@ -47,7 +46,6 @@ export default function Transactions() {
 
   React.useEffect(() => { loadTransactions(true); }, [search, filterCat, filterType]);
 
-  // ── Add transaction ────────────────────────────────────────────────────────
   async function addTransaction(e) {
     e.preventDefault();
     if (!form.amount || isNaN(Number(form.amount))) return toast("Enter a valid amount", "error");
@@ -67,7 +65,6 @@ export default function Transactions() {
     }
   }
 
-  // ── Delete with optimistic UI ──────────────────────────────────────────────
   async function remove(id) {
     const prev = [...transactions];
     setTransactions((t) => t.filter((x) => x.id !== id));
@@ -80,7 +77,6 @@ export default function Transactions() {
     }
   }
 
-  // ── SMS import ─────────────────────────────────────────────────────────────
   async function importSms() {
     const messages = smsText.split(/\n+/).map((l) => l.trim()).filter(Boolean);
     if (!messages.length) return;
@@ -100,7 +96,6 @@ export default function Transactions() {
     }
   }
 
-  // ── Statement upload with job polling ─────────────────────────────────────
   async function uploadStatement(e) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -109,10 +104,8 @@ export default function Transactions() {
     e.target.value = "";
     try {
       const job = await apiFetch("/imports/statement", { method: "POST", body });
-      setImportJobId(job.id);
       setImportStatus("processing");
       toast("Statement uploaded — processing…", "info");
-      // Poll for completion
       const poll = setInterval(async () => {
         try {
           const j = await apiFetch(`/imports/jobs/${job.id}`);
@@ -132,156 +125,206 @@ export default function Transactions() {
     }
   }
 
+  const TABS = [
+    { id: "manual",    label: "Add Manually",    Icon: PlusCircle },
+    { id: "sms",       label: "SMS Import",      Icon: MessageSquare },
+    { id: "statement", label: "Bank Statement",  Icon: FileText },
+  ];
+
   return (
     <div className="view-transactions">
-      <div className="page-title-block">
+      <div>
         <h1 className="page-title">Transactions</h1>
         <p className="page-subtitle">Log, import and manage every transaction</p>
       </div>
 
-      {/* ── Add form ── */}
-      <div className="card form-card">
-        <div className="form-section-title">Add Transaction</div>
-        <form onSubmit={addTransaction}>
-          <div className="type-toggle">
-            <button type="button"
-              className={`type-btn${form.type === "expense" ? " active expense" : ""}`}
-              onClick={() => setForm({ ...form, type: "expense", category: "Groceries" })}>
-              Expense
+      {/* Tabbed add/import card */}
+      <div className="card" style={{ marginBottom: 24 }}>
+        <div style={{ display: 'flex', gap: 4, marginBottom: 28, background: 'var(--bg)', padding: 4, borderRadius: 12 }}>
+          {TABS.map(({ id, label, Icon }) => (
+            <button
+              key={id}
+              onClick={() => setActiveTab(id)}
+              style={{
+                flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                padding: '10px 16px', borderRadius: 10, border: 'none', cursor: 'pointer',
+                fontSize: 14, fontWeight: 600, transition: 'all 0.2s',
+                background: activeTab === id ? 'var(--surface)' : 'transparent',
+                color: activeTab === id ? 'var(--accent)' : 'var(--text-secondary)',
+                boxShadow: activeTab === id ? 'var(--shadow)' : 'none',
+              }}
+            >
+              <Icon size={15} /> {label}
             </button>
-            <button type="button"
-              className={`type-btn${form.type === "income" ? " active income" : ""}`}
-              onClick={() => setForm({ ...form, type: "income", category: "Salary" })}>
-              Income
-            </button>
-          </div>
-          <div className="form-grid-2">
-            <div className="form-field">
-              <label className="form-label">Amount</label>
-              <div className="input-prefix-wrap">
-                <span className="input-prefix">₹</span>
-                <input required type="number" min="1" step="0.01" placeholder="0.00"
-                  value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
+          ))}
+        </div>
+
+        {/* Manual form */}
+        {activeTab === "manual" && (
+          <form onSubmit={addTransaction}>
+            <div className="type-toggle">
+              <button type="button"
+                className={`type-btn${form.type === "expense" ? " active expense" : ""}`}
+                onClick={() => setForm({ ...form, type: "expense", category: "Groceries" })}>
+                Expense
+              </button>
+              <button type="button"
+                className={`type-btn${form.type === "income" ? " active income" : ""}`}
+                onClick={() => setForm({ ...form, type: "income", category: "Salary" })}>
+                Income
+              </button>
+            </div>
+            <div className="form-grid-2">
+              <div className="form-field">
+                <label className="form-label">Amount</label>
+                <div className="input-prefix-wrap">
+                  <span className="input-prefix">₹</span>
+                  <input required type="number" min="1" step="0.01" placeholder="0.00"
+                    value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
+                </div>
+              </div>
+              <div className="form-field">
+                <label className="form-label">Date</label>
+                <input type="date" value={form.date}
+                  onChange={(e) => setForm({ ...form, date: e.target.value })} />
               </div>
             </div>
             <div className="form-field">
-              <label className="form-label">Date</label>
-              <input type="date" value={form.date}
-                onChange={(e) => setForm({ ...form, date: e.target.value })} />
+              <label className="form-label">Description</label>
+              <input placeholder="What was this for?" value={form.description} required
+                onChange={(e) => setForm({ ...form, description: e.target.value })} />
             </div>
-          </div>
-          <div className="form-field">
-            <label className="form-label">Description</label>
-            <input placeholder="What was this for?" value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })} required />
-          </div>
-          <div className="form-field">
-            <label className="form-label">Category</label>
-            <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
-              {(form.type === "income" ? ["Salary","Freelance","Other"] : EXPENSE_CATEGORIES)
-                .map((c) => <option key={c}>{c}</option>)}
-            </select>
-          </div>
-          <div className="form-actions">
-            <button type="submit" className="btn-primary" disabled={submitting}>
+            <div className="form-field" style={{ marginBottom: 28 }}>
+              <label className="form-label">Category</label>
+              <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+                {(form.type === "income" ? ["Salary", "Freelance", "Other"] : EXPENSE_CATEGORIES)
+                  .map((c) => <option key={c}>{c}</option>)}
+              </select>
+            </div>
+            <button type="submit" className="btn-primary" style={{ padding: '13px 28px' }} disabled={submitting}>
               {submitting ? "Adding…" : "Add Transaction"}
             </button>
-          </div>
-        </form>
-      </div>
+          </form>
+        )}
 
-      {/* ── Import ── */}
-      <div className="import-grid">
-        <div className="card">
-          <div className="form-section-title">SMS Import</div>
-          <div className="form-field">
-            <label className="form-label">Paste UPI SMS messages (one per line)</label>
-            <textarea rows={4} placeholder="One message per line…"
-              value={smsText} onChange={(e) => setSmsText(e.target.value)} />
-          </div>
-          <button className="btn-primary" onClick={importSms} disabled={importing || !smsText.trim()}>
-            <Upload size={14} /> {importing ? "Parsing…" : "Parse SMS"}
-          </button>
-        </div>
-        <div className="card">
-          <div className="form-section-title">Statement Upload</div>
-          <div className="form-field">
-            <label className="form-label">Upload CSV, Excel or PDF bank statement</label>
-            <input type="file" accept=".csv,.xls,.xlsx,.pdf" onChange={uploadStatement} />
-          </div>
-          {importStatus && (
-            <div className={`import-status import-status-${importStatus}`}>
-              {importStatus === "processing" && "⏳ Processing…"}
-              {importStatus === "done" && "✅ Import complete"}
-              {importStatus === "failed" && "❌ Import failed"}
+        {/* SMS import */}
+        {activeTab === "sms" && (
+          <div>
+            <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 20, lineHeight: 1.6 }}>
+              Paste UPI / bank SMS messages (one per line). Amadeus AI will extract transactions automatically.
+            </p>
+            <div className="form-field" style={{ marginBottom: 20 }}>
+              <label className="form-label">SMS Messages</label>
+              <textarea rows={6} placeholder="Paste SMS messages here, one per line…"
+                value={smsText} onChange={(e) => setSmsText(e.target.value)}
+                style={{ resize: 'vertical' }} />
             </div>
-          )}
-        </div>
+            <button className="btn-primary" onClick={importSms}
+              disabled={importing || !smsText.trim()}>
+              <Upload size={16} /> {importing ? "Parsing…" : "Parse & Import SMS"}
+            </button>
+          </div>
+        )}
+
+        {/* Statement upload */}
+        {activeTab === "statement" && (
+          <div>
+            <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 20, lineHeight: 1.6 }}>
+              Upload your bank statement in CSV, Excel, or PDF format. We'll automatically extract and categorize your transactions.
+            </p>
+            <div style={{ border: '2px dashed var(--border)', borderRadius: 'var(--radius-sm)', padding: '40px 24px', textAlign: 'center', marginBottom: 16, background: 'var(--bg)', transition: 'border-color 0.2s' }}>
+              <FileText size={32} style={{ color: 'var(--text-muted)', marginBottom: 12 }} />
+              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>Drop your file here</div>
+              <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20 }}>Supports CSV, XLS, XLSX, PDF</div>
+              <label className="btn-secondary" style={{ cursor: 'pointer', padding: '10px 24px' }}>
+                Browse File
+                <input type="file" accept=".csv,.xls,.xlsx,.pdf" onChange={uploadStatement} style={{ display: 'none' }} />
+              </label>
+            </div>
+            {importStatus && (
+              <div style={{
+                padding: '14px 18px', borderRadius: 12, fontSize: 14, fontWeight: 600,
+                background: importStatus === 'done' ? '#ecfdf5' : importStatus === 'failed' ? '#fff1f2' : '#eff6ff',
+                color: importStatus === 'done' ? '#059669' : importStatus === 'failed' ? '#e11d48' : '#4f46e5',
+                border: `1px solid ${importStatus === 'done' ? '#a7f3d0' : importStatus === 'failed' ? '#fecdd3' : '#c7d2fe'}`,
+              }}>
+                {importStatus === "processing" && "⏳ Processing your statement…"}
+                {importStatus === "done"       && "✅ Import complete!"}
+                {importStatus === "failed"     && "❌ Import failed. Please try again."}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* ── Search + Filter Bar ── */}
+      {/* Transaction list */}
       <div className="card">
-        <div className="filter-bar">
-          <div className="search-wrap">
-            <Search size={14} className="search-icon" />
-            <input className="search-input" placeholder="Search transactions…"
-              value={search} onChange={(e) => setSearch(e.target.value)} />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+          <div className="chart-title">Recent Transactions</div>
+          <div style={{ display: 'flex', gap: 10, flex: 1, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+            <div className="search-wrap" style={{ maxWidth: 280 }}>
+              <Search size={15} className="search-icon" />
+              <input className="search-input" placeholder="Search…"
+                value={search} onChange={(e) => setSearch(e.target.value)} />
+            </div>
+            <select className="filter-select" value={filterCat}
+              onChange={(e) => setFilterCat(e.target.value)} style={{ minWidth: 140 }}>
+              <option value="">All Categories</option>
+              {EXPENSE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+            </select>
+            <select className="filter-select" value={filterType}
+              onChange={(e) => setFilterType(e.target.value)} style={{ minWidth: 120 }}>
+              <option value="">All Types</option>
+              <option value="expense">Expense</option>
+              <option value="income">Income</option>
+            </select>
           </div>
-          <select className="filter-select" value={filterCat}
-            onChange={(e) => setFilterCat(e.target.value)}>
-            <option value="">All Categories</option>
-            {EXPENSE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
-          </select>
-          <select className="filter-select" value={filterType}
-            onChange={(e) => setFilterType(e.target.value)}>
-            <option value="">All Types</option>
-            <option value="expense">Expense</option>
-            <option value="income">Income</option>
-          </select>
         </div>
 
         <div className="tx-head">
           <span>Date</span><span>Category</span><span>Description</span><span>Amount</span><span />
         </div>
 
-        {loading && Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="tx-item tx-skeleton">
+        {loading && Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className="tx-item">
             {Array.from({ length: 4 }).map((_, j) => (
-              <div key={j} className="skeleton" style={{ height: 14, borderRadius: 4 }} />
+              <div key={j} className="skeleton" style={{ height: 14, borderRadius: 6 }} />
             ))}
             <div />
           </div>
         ))}
 
         {!loading && transactions.length === 0 && (
-          <div className="empty-state">
-            <div className="empty-state-icon">📭</div>
-            <div className="empty-state-title">No transactions found</div>
-            <div className="empty-state-sub">Add one above or adjust your filters</div>
+          <div style={{ textAlign: 'center', padding: '56px 24px' }}>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>📭</div>
+            <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>No transactions found</div>
+            <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>Add one above or adjust your filters</div>
           </div>
         )}
 
         {!loading && transactions.map((tx) => (
           <div className="tx-item" key={tx.id}>
-            <span>{tx.date}</span>
-            <span style={{ color: CATEGORY_COLORS[tx.category] || "#9ca3af" }}>
-              {tx.category}
+            <span style={{ color: 'var(--text-secondary)', fontSize: 13, fontWeight: 500 }}>{tx.date}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: CATEGORY_COLORS[tx.category] || '#94a3b8', flexShrink: 0 }} />
+              <span style={{ color: 'var(--text-secondary)', fontSize: 13, fontWeight: 500 }}>{tx.category}</span>
             </span>
-            <span>{tx.description}</span>
-            <strong className={tx.type === "income" ? "tx-amount-income" : "tx-amount-expense"}>
-              {tx.type === "income" ? "+" : "-"}{money(tx.amount)}
-            </strong>
+            <span style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.description}</span>
+            <span className={tx.type === "income" ? "tx-amount-income" : "tx-amount-expense"}>
+              {tx.type === "income" ? "+" : "−"}{money(tx.amount)}
+            </span>
             <button className="tx-delete-btn" onClick={() => remove(tx.id)} aria-label={`Delete ${tx.description}`}>
-              <Trash2 size={13} />
+              <Trash2 size={14} />
             </button>
           </div>
         ))}
 
         {hasMore && (
-          <button className="btn-secondary" style={{ marginTop: 12 }}
-            onClick={() => loadTransactions(false)}>
-            Load more
-          </button>
+          <div style={{ padding: '16px 20px', borderTop: '1px solid var(--border)' }}>
+            <button className="btn-secondary" onClick={() => loadTransactions(false)} style={{ fontSize: 14 }}>
+              Load more
+            </button>
+          </div>
         )}
       </div>
     </div>

@@ -11,6 +11,13 @@ import {
   ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid, Legend,
 } from "recharts";
 
+const TIME_FILTERS = [
+  { id: "this_month", label: "This Month" },
+  { id: "3m",         label: "3 Months" },
+  { id: "current_year", label: "This Year" },
+  { id: "all",        label: "All Time" },
+];
+
 export default function Dashboard({ analyticsOnly = false }) {
   const toast = useToast();
   const [summary, setSummary] = React.useState(null);
@@ -30,6 +37,7 @@ export default function Dashboard({ analyticsOnly = false }) {
       <div className="view-dashboard">
         <div className="page-title-block">
           <h1 className="page-title">{analyticsOnly ? "Analytics" : "Dashboard"}</h1>
+          <p className="page-subtitle">Loading your financial data…</p>
         </div>
         <div className="account-grid">
           {Array.from({ length: 4 }).map((_, i) => <CardSkeleton key={i} />)}
@@ -42,16 +50,15 @@ export default function Dashboard({ analyticsOnly = false }) {
     );
   }
 
-  const income = Number(summary?.income || 0);
+  const income   = Number(summary?.income   || 0);
   const expenses = Number(summary?.expenses || 0);
-  const net = Number(summary?.net || 0);
-  const saved = Math.max(0, income - expenses);
+  const net      = Number(summary?.net      || 0);
+  const saved    = Math.max(0, income - expenses);
   const savingsRate = income > 0 ? Math.round((saved / income) * 100) : 0;
   const periodLabel = summary?.period_start && summary?.period_end
-    ? `${summary.period_start} to ${summary.period_end}`
+    ? `${summary.period_start} → ${summary.period_end}`
     : "All available transactions";
 
-  // Use bank-reported balances when available (from statement imports with Balance column)
   const closingBalance = summary?.closing_balance != null ? Number(summary.closing_balance) : null;
   const openingBalance = summary?.opening_balance != null ? Number(summary.opening_balance) : null;
   const hasBalanceData = closingBalance !== null;
@@ -79,111 +86,103 @@ export default function Dashboard({ analyticsOnly = false }) {
       Expenses: Number(row.expenses),
     }));
 
-  // Cash transactions (manually entered, NOT from bank statement)
-  const cashIncome = Number(summary?.cash_income || 0);
+  const cashIncome   = Number(summary?.cash_income   || 0);
   const cashExpenses = Number(summary?.cash_expenses || 0);
-  const cashNet = Number(summary?.cash_net || 0);
+  const cashNet      = Number(summary?.cash_net      || 0);
   const hasCash = cashIncome > 0 || cashExpenses > 0;
 
   const kpiCards = [
-    { label: "Total Income", val: income, change: periodLabel, type: "positive", Icon: TrendingUp },
-    { label: "Total Expenses", val: expenses, change: periodLabel, type: "negative", Icon: TrendingDown },
-    { label: "Money Saved", val: saved, change: income > 0 ? `${savingsRate}% of income` : "—", type: "positive", Icon: PiggyBank },
-    { label: "Recurring", val: summary?.recurring?.length || 0, change: "Payments detected", type: "muted", Icon: Calendar },
-    ...(hasCash ? [{
-      label: "Cash on Hand",
-      val: cashNet,
-      change: cashExpenses > 0 ? `In: ${money(cashIncome)} · Out: ${money(cashExpenses)}` : `Received ${money(cashIncome)} in cash`,
-      type: cashNet >= 0 ? "positive" : "negative",
-      Icon: Banknote,
-      isCash: true,
-    }] : []),
+    { label: "Total Income",   val: income,   change: `${periodLabel}`,  type: "positive", Icon: TrendingUp },
+    { label: "Total Expenses", val: expenses, change: `${periodLabel}`,  type: "negative", Icon: TrendingDown },
+    { label: "Net Savings",    val: saved,    change: income > 0 ? `${savingsRate}% savings rate` : "—", type: "positive", Icon: PiggyBank },
+    { label: "Recurring",      val: summary?.recurring?.length || 0, change: "Payments detected", type: "muted", Icon: Calendar, isCount: true },
+    ...(hasCash ? [{ label: "Cash Net", val: cashNet, change: "Physical cash", type: cashNet >= 0 ? "positive" : "negative", Icon: Banknote, isCash: true }] : []),
   ];
+
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      return (
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: '12px 16px', boxShadow: 'var(--shadow)' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8 }}>{label}</div>
+          {payload.map(p => (
+            <div key={p.dataKey} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 600, color: p.color, marginBottom: 4 }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: p.color }} />
+              {p.dataKey}: {money(p.value)}
+            </div>
+          ))}
+        </div>
+      );
+    }
+    return null;
+  };
+
+  const kpiColors = { positive: '#10b981', negative: '#f43f5e', muted: '#94a3b8' };
+  const kpiBgColors = { positive: '#ecfdf5', negative: '#fff1f2', muted: '#f8fafc' };
 
   return (
     <div className="view-dashboard">
-      <div className="page-title-block">
-        <h1 className="page-title">{analyticsOnly ? "Financial Analytics" : "Financial Dashboard"}</h1>
-        <p className="page-subtitle">{analyticsOnly ? `Detailed trends and patterns, ${periodLabel}` : `Your financial picture from ${periodLabel}`}</p>
+      {/* Page header */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, marginBottom: 32 }}>
+        <div>
+          <h1 className="page-title" style={{ marginBottom: 6 }}>{analyticsOnly ? "Financial Analytics" : "Financial Dashboard"}</h1>
+          <p className="page-subtitle" style={{ marginBottom: 0 }}>{periodLabel}</p>
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {TIME_FILTERS.map(r => (
+            <button
+              key={r.id}
+              onClick={() => setTimeRange(r.id)}
+              className={timeRange === r.id ? "btn-primary" : "btn-secondary"}
+              style={{ padding: '8px 16px', fontSize: 13 }}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="filter-row" style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
-        {[
-          { id: 'this_month', label: 'This Month' },
-          { id: '3m', label: '3 Months' },
-          { id: 'current_year', label: 'Current Year' },
-          { id: 'all', label: 'All Time' },
-        ].map(r => (
-          <button
-            key={r.id}
-            onClick={() => setTimeRange(r.id)}
-            className={`btn-secondary ${timeRange === r.id ? 'active' : ''}`}
-            style={timeRange === r.id ? { backgroundColor: 'var(--accent)', color: 'white', borderColor: 'var(--accent)', fontWeight: 500 } : { fontWeight: 500 }}
-          >
-            {r.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Net worth hero */}
+      {/* Hero card */}
       {!analyticsOnly && (
-        <div className="card hero-card">
-          {hasBalanceData ? (
-            <>
-              <div className="hero-label"><DollarSign size={15} /> Closing Balance</div>
-              <div className="hero-amount">{money(closingBalance)}</div>
-              <div className={`hero-change ${net >= 0 ? "positive" : "negative"}`}>
-                {net >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-                {openingBalance !== null
-                  ? `Opened at ${money(openingBalance)} · Net flow ${net >= 0 ? "+" : ""}${money(net)}`
-                  : `Net flow ${net >= 0 ? "+" : ""}${money(net)}`}
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="hero-label"><DollarSign size={15} /> Net Cash Flow</div>
-              <div className="hero-amount">{money(net)}</div>
-              <div className={`hero-change ${net >= 0 ? "positive" : "negative"}`}>
-                {net >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-                {income > 0 ? `${savingsRate}% savings rate` : "No income recorded yet"}
-              </div>
-            </>
-          )}
+        <div className="card hero-card" style={{ marginBottom: 24 }}>
+          <div className="hero-label">
+            <DollarSign size={16} />
+            {hasBalanceData ? "Closing Balance" : "Net Cash Flow"}
+          </div>
+          <div className="hero-amount">
+            {money(hasBalanceData ? closingBalance : net)}
+          </div>
+          <div className={`hero-change ${net >= 0 ? "positive" : "negative"}`}>
+            {net >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+            {hasBalanceData && openingBalance !== null
+              ? `Opened at ${money(openingBalance)} · Net ${net >= 0 ? "+" : ""}${money(net)}`
+              : income > 0 ? `${savingsRate}% savings rate` : "No income recorded yet"}
+          </div>
         </div>
       )}
 
-      {/* KPI cards */}
-      <div className="account-grid">
-        {kpiCards.map(({ label, val, change, type, Icon, isCash }) => (
-          <div
-            className="card account-card"
-            key={label}
-            style={isCash ? {
-              borderLeft: "3px solid #f59e0b",
-              background: "linear-gradient(135deg, rgba(245,158,11,0.08) 0%, var(--card-bg) 100%)"
-            } : {}}
-          >
+      {/* KPI Cards */}
+      <div className="account-grid" style={{ marginBottom: 24 }}>
+        {kpiCards.map(({ label, val, change, type, Icon, isCount, isCash }) => (
+          <div className="card account-card" key={label}
+            style={{ borderTop: `3px solid ${isCash ? '#f59e0b' : kpiColors[type]}` }}>
             <div className="account-card-header">
               <span className="account-label">{label}</span>
-              <Icon size={20} className={`icon-${type}`} style={isCash ? { color: "#f59e0b" } : {}} />
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: isCash ? '#fef3c7' : kpiBgColors[type], display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Icon size={18} style={{ color: isCash ? '#f59e0b' : kpiColors[type] }} />
+              </div>
             </div>
             <div className="account-amount">
-              {label === "Recurring" ? val : money(val)}
+              {isCount ? val : money(val)}
             </div>
-            <div className={`account-change ${type}`}>
-              {isCash ? (
-                <span style={{ color: "#a78bfa", fontSize: "11px" }}>
-                  ✦ Not in bank balance · Physical cash
-                </span>
-              ) : null}
-              {change}
+            <div className={`account-change ${type}`} style={{ fontSize: 12 }}>
+              {isCash ? <span style={{ color: '#a78bfa', fontWeight: 600 }}>✦ Not in bank · Physical</span> : change}
             </div>
           </div>
         ))}
       </div>
 
       {/* Charts */}
-      <div className="charts-grid">
+      <div className="charts-grid" style={{ marginBottom: 24 }}>
         <div className="card">
           <div className="chart-card-header">
             <div>
@@ -191,17 +190,21 @@ export default function Dashboard({ analyticsOnly = false }) {
               <div className="chart-subtitle">By category</div>
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={240}>
-            <PieChart>
-              <Pie data={pieRows} dataKey="value" innerRadius={60} outerRadius={95} paddingAngle={3}>
-                {pieRows.map((r) => (
-                  <Cell key={r.name} fill={CATEGORY_COLORS[r.name] || "#94a3b8"} />
-                ))}
-              </Pie>
-              <Tooltip formatter={(v) => money(v)} />
-              <Legend iconSize={10} iconType="circle" />
-            </PieChart>
-          </ResponsiveContainer>
+          {pieRows.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-muted)', fontSize: 14 }}>No expense data</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={240}>
+              <PieChart>
+                <Pie data={pieRows} dataKey="value" innerRadius={55} outerRadius={90} paddingAngle={3} strokeWidth={0}>
+                  {pieRows.map((r) => (
+                    <Cell key={r.name} fill={CATEGORY_COLORS[r.name] || "#94a3b8"} />
+                  ))}
+                </Pie>
+                <Tooltip content={<CustomTooltip />} />
+                <Legend iconSize={8} iconType="circle" wrapperStyle={{ fontSize: 12, paddingTop: 16 }} />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
         </div>
 
         <div className="card">
@@ -212,20 +215,20 @@ export default function Dashboard({ analyticsOnly = false }) {
             </div>
           </div>
           <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={dayRows} barGap={3}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-              <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
-              <Tooltip formatter={(v) => money(v)} />
-              <Bar dataKey="Income" fill="#10b981" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="Expenses" fill="#fb7185" radius={[4, 4, 0, 0]} />
+            <BarChart data={dayRows} barGap={4} barCategoryGap="30%">
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+              <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#94a3b8", fontWeight: 500 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: "#94a3b8", fontWeight: 500 }} axisLine={false} tickLine={false} width={60} tickFormatter={v => `₹${v >= 1000 ? (v/1000).toFixed(0) + 'k' : v}`} />
+              <Tooltip content={<CustomTooltip />} />
+              <Bar dataKey="Income"   fill="#10b981" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="Expenses" fill="#f43f5e" radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
       </div>
 
-      {/* Area trend */}
-      <div className="card">
+      {/* Monthly area chart */}
+      <div className="card" style={{ marginBottom: 24 }}>
         <div className="chart-card-header">
           <div>
             <div className="chart-title">Monthly Cash Flow</div>
@@ -236,58 +239,60 @@ export default function Dashboard({ analyticsOnly = false }) {
           <AreaChart data={monthRows.length > 1 ? monthRows : dayRows}>
             <defs>
               <linearGradient id="gInc" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#10b981" stopOpacity={0.2} />
+                <stop offset="5%"  stopColor="#10b981" stopOpacity={0.15} />
                 <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
               </linearGradient>
               <linearGradient id="gExp" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#fb7185" stopOpacity={0.15} />
-                <stop offset="95%" stopColor="#fb7185" stopOpacity={0} />
+                <stop offset="5%"  stopColor="#f43f5e" stopOpacity={0.12} />
+                <stop offset="95%" stopColor="#f43f5e" stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-            <XAxis dataKey={monthRows.length > 1 ? "month" : "date"} tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
-            <Tooltip formatter={(v) => money(v)} />
-            <Area dataKey="Income" stroke="#10b981" fill="url(#gInc)" strokeWidth={2} />
-            <Area dataKey="Expenses" stroke="#fb7185" fill="url(#gExp)" strokeWidth={2} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+            <XAxis dataKey={monthRows.length > 1 ? "month" : "date"} tick={{ fontSize: 11, fill: "#94a3b8", fontWeight: 500 }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fontSize: 11, fill: "#94a3b8", fontWeight: 500 }} axisLine={false} tickLine={false} width={60} tickFormatter={v => `₹${v >= 1000 ? (v/1000).toFixed(0) + 'k' : v}`} />
+            <Tooltip content={<CustomTooltip />} />
+            <Area dataKey="Income"   stroke="#10b981" fill="url(#gInc)" strokeWidth={2.5} dot={false} />
+            <Area dataKey="Expenses" stroke="#f43f5e" fill="url(#gExp)" strokeWidth={2.5} dot={false} />
           </AreaChart>
         </ResponsiveContainer>
       </div>
 
-      {/* Proactive AI Insights */}
+      {/* AI Insights */}
       {!analyticsOnly && <ProactiveInsights />}
 
-      {/* Rule-based Insights */}
+      {/* Rule-based insights */}
       {(summary?.insights || []).length > 0 && (
-        <div className="card">
-          <div className="chart-title" style={{ marginBottom: 14 }}>Actionable Insights</div>
-          <div className="insights-list">
+        <div className="card" style={{ marginTop: 24 }}>
+          <div className="chart-title" style={{ marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <AlertCircle size={18} style={{ color: 'var(--accent)' }} /> Actionable Insights
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {summary.insights.map((item) => (
-              <div className="insight-item" key={item}>
-                <AlertCircle size={15} className="icon-accent" />
-                <p>{item}</p>
+              <div key={item} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '14px 16px', background: 'var(--accent-light)', borderRadius: 12, borderLeft: '3px solid var(--accent)' }}>
+                <AlertCircle size={15} style={{ color: 'var(--accent)', flexShrink: 0, marginTop: 2 }} />
+                <p style={{ fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.6, margin: 0 }}>{item}</p>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* Analytics extra: top categories */}
+      {/* Analytics extra */}
       {analyticsOnly && (
-        <div className="account-grid">
+        <div className="account-grid" style={{ marginTop: 24 }}>
           {[
-            { name: "Closing Balance", val: hasBalanceData ? money(closingBalance) : money(net), sub: hasBalanceData && openingBalance !== null ? `Opened at ${money(openingBalance)}` : savingsRate > 0 ? `+${savingsRate}% savings` : "—", Icon: DollarSign },
-            { name: "Savings Rate", val: `${savingsRate}%`, sub: "This period", Icon: PiggyBank },
-            { name: "Total Expenses", val: money(expenses), sub: `${pieRows.length} categories`, Icon: BarChart3 },
-            { name: "Top Category", val: topCat, sub: money(byCategory[topCat] || 0), Icon: Target },
+            { name: "Balance / Net",   val: hasBalanceData ? money(closingBalance) : money(net), sub: hasBalanceData && openingBalance !== null ? `Opened at ${money(openingBalance)}` : savingsRate > 0 ? `+${savingsRate}% savings` : "—", Icon: DollarSign },
+            { name: "Savings Rate",    val: `${savingsRate}%`,       sub: "This period",                         Icon: PiggyBank },
+            { name: "Total Expenses",  val: money(expenses),         sub: `${pieRows.length} categories`,         Icon: BarChart3 },
+            { name: "Top Category",    val: topCat,                  sub: money(byCategory[topCat] || 0),        Icon: Target },
           ].map(({ name, val, sub, Icon }) => (
-            <div className="card analytics-stat-card" key={name}>
-              <div className="analytics-stat-card-top">
-                <div className="analytics-stat-name">{name}</div>
-                <Icon size={18} className="analytics-stat-icon" />
+            <div className="card account-card" key={name}>
+              <div className="account-card-header">
+                <span className="account-label">{name}</span>
+                <Icon size={18} style={{ color: 'var(--accent)' }} />
               </div>
-              <div className="analytics-stat-value">{val}</div>
-              <div className="analytics-stat-sub">{sub}</div>
+              <div className="account-amount" style={{ fontSize: 22 }}>{val}</div>
+              <div className="account-change muted">{sub}</div>
             </div>
           ))}
         </div>

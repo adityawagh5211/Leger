@@ -1,15 +1,15 @@
 import React from "react";
 import { apiFetch, money, EXPENSE_CATEGORIES, CATEGORY_COLORS } from "../lib";
 import { useToast, CardSkeleton } from "../components/ui";
-import { Target, AlertCircle } from "lucide-react";
+import { Target, AlertCircle, Sparkles, CheckCircle } from "lucide-react";
 
 export default function Budgets() {
   const toast = useToast();
-  const [budgets, setBudgets] = React.useState([]);
-  const [summary, setSummary] = React.useState(null);
-  const [draft, setDraft] = React.useState({});
-  const [loading, setLoading] = React.useState(true);
-  const [saving, setSaving] = React.useState(false);
+  const [budgets, setBudgets]   = React.useState([]);
+  const [summary, setSummary]   = React.useState(null);
+  const [draft, setDraft]       = React.useState({});
+  const [loading, setLoading]   = React.useState(true);
+  const [saving, setSaving]     = React.useState(false);
 
   async function load() {
     setLoading(true);
@@ -30,7 +30,6 @@ export default function Budgets() {
 
   React.useEffect(() => { load(); }, []);
 
-  const budgetMap = Object.fromEntries(budgets.map((b) => [b.category, Number(b.monthly_limit)]));
   const byCategory = summary?.by_category || {};
 
   async function saveBudgets() {
@@ -66,9 +65,8 @@ export default function Budgets() {
   if (loading) {
     return (
       <div className="view-budgets">
-        <div className="page-title-block">
-          <h1 className="page-title">Goals & Budgets</h1>
-        </div>
+        <h1 className="page-title">Goals & Budgets</h1>
+        <p className="page-subtitle">Loading your budgets…</p>
         <div className="budget-grid">
           {Array.from({ length: 6 }).map((_, i) => <CardSkeleton key={i} />)}
         </div>
@@ -76,87 +74,119 @@ export default function Budgets() {
     );
   }
 
+  const totalBudgeted = EXPENSE_CATEGORIES.reduce((s, c) => s + (Number(draft[c]) || 0), 0);
+  const totalSpent    = EXPENSE_CATEGORIES.reduce((s, c) => s + Number(byCategory[c] || 0), 0);
+  const overCount     = EXPENSE_CATEGORIES.filter(c => {
+    const b = Number(draft[c] || 0); return b > 0 && Number(byCategory[c] || 0) > b;
+  }).length;
+
   return (
     <div className="view-budgets">
-      <div className="page-title-block">
-        <h1 className="page-title">Goals & Budgets</h1>
-        <p className="page-subtitle">Track spending limits and stay on budget</p>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, marginBottom: 32 }}>
+        <div>
+          <h1 className="page-title">Goals & Budgets</h1>
+          <p className="page-subtitle" style={{ marginBottom: 0 }}>Track spending limits and stay on budget</p>
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button className="btn-secondary" style={{ fontSize: 14 }} onClick={applyDynamic}>
+            <Sparkles size={15} /> AI Suggestions
+          </button>
+          <button className="btn-primary" onClick={saveBudgets} disabled={saving}>
+            <CheckCircle size={15} /> {saving ? "Saving…" : "Save Budgets"}
+          </button>
+        </div>
       </div>
 
-      <div className="section-block">
-        <div className="section-header">
-          <div className="section-header-left"><Target size={18} /> Budget Tracking</div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn-secondary" style={{ fontSize: 13, padding: "8px 14px" }}
-              onClick={applyDynamic}>
-              Use 3-month dynamic
-            </button>
-            <button className="btn-add" onClick={saveBudgets} disabled={saving}>
-              {saving ? "Saving…" : "Save Budgets"}
-            </button>
+      {/* Summary row */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 28 }}>
+        {[
+          { label: 'Total Budgeted', val: money(totalBudgeted), color: 'var(--accent)' },
+          { label: 'Total Spent',    val: money(totalSpent),    color: totalSpent > totalBudgeted ? 'var(--negative)' : 'var(--positive)' },
+          { label: 'Over Budget',    val: `${overCount} categories`, color: overCount > 0 ? 'var(--negative)' : 'var(--positive)' },
+        ].map(({ label, val, color }) => (
+          <div className="card" key={label} style={{ padding: '20px 24px' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>{label}</div>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 700, color }}>{val}</div>
           </div>
-        </div>
+        ))}
+      </div>
 
-        <div className="budget-grid">
-          {EXPENSE_CATEGORIES.map((cat) => {
-            const spent = Number(byCategory[cat] || 0);
-            const budget = draft[cat] || 0;
-            const pct = budget ? Math.min(120, (spent / budget) * 100) : 0;
-            const isOver = budget > 0 && spent > budget;
-            const color = CATEGORY_COLORS[cat] || "#9ca3af";
+      <div className="budget-grid">
+        {EXPENSE_CATEGORIES.map((cat) => {
+          const spent  = Number(byCategory[cat] || 0);
+          const budget = Number(draft[cat] || 0);
+          const pct    = budget > 0 ? Math.min(120, (spent / budget) * 100) : 0;
+          const isOver = budget > 0 && spent > budget;
+          const color  = CATEGORY_COLORS[cat] || "#9ca3af";
 
-            return (
-              <div className={`card budget-card${isOver ? " over-budget" : ""}`} key={cat}>
-                <div className="budget-card-top">
-                  <div className="budget-cat-name" style={{ color }}>{cat}</div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                    <span className="budget-period">Monthly</span>
-                    {isOver && <AlertCircle size={14} className="budget-over-icon" />}
-                  </div>
+          return (
+            <div className={`card budget-card${isOver ? " over-budget" : ""}`} key={cat}>
+              <div className="budget-card-top">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                  <div className="budget-cat-name" style={{ color: isOver ? 'var(--negative)' : 'var(--text-primary)' }}>{cat}</div>
                 </div>
-                <div className="budget-progress-label">
-                  <span>Progress</span>
-                  <span className={`budget-progress-pct${isOver ? " over" : ""}`}>
-                    {Math.round(pct)}%
-                  </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span className="budget-period">Monthly</span>
+                  {isOver && <AlertCircle size={16} style={{ color: 'var(--negative)' }} />}
                 </div>
-                <div className="progress-bar-track">
-                  <div
-                    className={`progress-bar-fill${isOver ? " over" : ""}`}
-                    style={{
-                      width: `${Math.min(100, pct)}%`,
-                      background: isOver ? "#ef4444" : color,
-                    }}
-                  />
+              </div>
+
+              <div className="budget-progress-label">
+                <span style={{ color: 'var(--text-secondary)' }}>
+                  {money(spent)} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>of {budget > 0 ? money(budget) : "—"}</span>
+                </span>
+                <span style={{ color: isOver ? 'var(--negative)' : pct > 80 ? 'var(--warning)' : 'var(--text-secondary)' }}>
+                  {budget > 0 ? `${Math.round(pct)}%` : "No limit"}
+                </span>
+              </div>
+
+              <div className="progress-bar-track">
+                <div
+                  className="progress-bar-fill"
+                  style={{
+                    width: `${Math.min(100, pct)}%`,
+                    background: isOver ? 'var(--negative)' : pct > 80 ? 'var(--warning)' : color,
+                  }}
+                />
+              </div>
+
+              {isOver && (
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--negative)', marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <AlertCircle size={13} /> Over by {money(spent - budget)}
                 </div>
-                {isOver && (
-                  <div className="budget-over-msg">Over by {money(spent - budget)}</div>
-                )}
-                <div className="budget-stats">
-                  <div>
-                    <div className="budget-stat-label">Spent</div>
-                    <div className={`budget-stat-value${isOver ? " over" : ""}`}>{money(spent)}</div>
-                  </div>
-                  <div>
-                    <div className="budget-stat-label">Limit</div>
+              )}
+
+              <div className="budget-stats">
+                <div>
+                  <div className="budget-stat-label">Spent</div>
+                  <div className="budget-stat-value" style={{ color: isOver ? 'var(--negative)' : 'var(--text-primary)' }}>{money(spent)}</div>
+                </div>
+                <div>
+                  <div className="budget-stat-label">Monthly Limit</div>
+                  <div className="input-prefix-wrap">
+                    <span className="input-prefix" style={{ top: 'unset', transform: 'none', position: 'relative', left: 'unset', marginRight: 4, fontSize: 14, fontWeight: 700 }}>₹</span>
                     <input
-                      type="number" min="0" placeholder="Set budget"
+                      type="number" min="0" placeholder="Set limit"
                       value={draft[cat] ?? ""}
                       onChange={(e) => setDraft({ ...draft, [cat]: e.target.value })}
-                      style={{ padding: "4px 8px", fontSize: 14, marginTop: 2 }}
+                      style={{ padding: '6px 10px', fontSize: 15, fontWeight: 600, display: 'inline-block', width: 'calc(100% - 20px)' }}
                     />
                   </div>
                 </div>
-                <div className={`budget-remaining${isOver ? " over" : " ok"}`}>
-                  {isOver
-                    ? `${money(spent - budget)} over budget`
-                    : budget > 0 ? `${money(Math.max(0, budget - spent))} remaining` : "No limit set"
-                  }
-                </div>
               </div>
-            );
-          })}
-        </div>
+
+              <div className={`budget-remaining ${isOver ? "over" : "ok"}`}>
+                {isOver
+                  ? <><AlertCircle size={14} /> {money(spent - budget)} over budget</>
+                  : budget > 0
+                    ? <><CheckCircle size={14} /> {money(Math.max(0, budget - spent))} remaining</>
+                    : "No limit set"
+                }
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

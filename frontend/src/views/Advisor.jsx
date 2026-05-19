@@ -1,28 +1,28 @@
 import React from "react";
 import { API_BASE, apiFetch, authHeaders } from "../lib";
 import { useToast } from "../components/ui";
-import { Sparkles, Send, Trash2 } from "lucide-react";
+import { Sparkles, Send, Trash2, Plus, MessageSquare } from "lucide-react";
 
 const SUGGESTIONS = [
   "Where am I overspending most?",
   "How can I save more this month?",
   "Am I on track with my budgets?",
   "Which subscriptions should I cut?",
+  "Give me a monthly spending summary",
+  "What's my biggest expense category?",
 ];
-
-const SYSTEM_NOTE = "Your financial data is loaded. Ask me anything about your spending, savings, or budgets.";
 
 export default function Advisor() {
   const toast = useToast();
   const [conversations, setConversations] = React.useState([]);
-  const [activeId, setActiveId] = React.useState(null);
-  const [messages, setMessages] = React.useState([]);
-  const [input, setInput] = React.useState("");
-  const [streaming, setStreaming] = React.useState(false);
-  const [loadingConvs, setLoadingConvs] = React.useState(true);
-  const chatRef = React.useRef(null);
+  const [activeId, setActiveId]           = React.useState(null);
+  const [messages, setMessages]           = React.useState([]);
+  const [input, setInput]                 = React.useState("");
+  const [streaming, setStreaming]         = React.useState(false);
+  const [loadingConvs, setLoadingConvs]   = React.useState(true);
+  const chatRef  = React.useRef(null);
+  const inputRef = React.useRef(null);
 
-  // Load conversation list
   async function loadConversations() {
     try {
       const convs = await apiFetch("/conversations");
@@ -34,7 +34,6 @@ export default function Advisor() {
     }
   }
 
-  // Load messages for a conversation
   async function openConversation(id) {
     setActiveId(id);
     try {
@@ -47,11 +46,8 @@ export default function Advisor() {
 
   React.useEffect(() => { loadConversations(); }, []);
 
-  // Auto-scroll chat
   React.useEffect(() => {
-    if (chatRef.current) {
-      chatRef.current.scrollTop = chatRef.current.scrollHeight;
-    }
+    if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
   }, [messages]);
 
   async function send() {
@@ -61,14 +57,11 @@ export default function Advisor() {
     setInput("");
     setMessages((m) => [...m, { role: "user", text: q }]);
     setStreaming(true);
-
-    // Placeholder for streaming response
     setMessages((m) => [...m, { role: "assistant", text: "" }]);
 
     try {
       const body = JSON.stringify({ question: q, conversation_id: activeId || undefined });
-
-      const res = await fetch(`${API_BASE}/advisor/stream`, {
+      const res  = await fetch(`${API_BASE}/advisor/stream`, {
         method: "POST",
         headers: authHeaders({ "Content-Type": "application/json" }),
         body,
@@ -76,14 +69,13 @@ export default function Advisor() {
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-      // Read new conversation ID from header
       const newConvId = res.headers.get("X-Conversation-Id");
       if (newConvId && !activeId) {
         setActiveId(newConvId);
         loadConversations();
       }
 
-      const reader = res.body.getReader();
+      const reader  = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
 
@@ -92,17 +84,13 @@ export default function Advisor() {
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n");
-        buffer = lines.pop(); // keep incomplete line
+        buffer = lines.pop();
 
         for (const line of lines) {
           if (!line.startsWith("data: ")) continue;
           const data = line.slice(6);
           if (data === "[DONE]") break;
-          if (data.startsWith("[ERROR]")) {
-            toast(data.slice(7).trim(), "error");
-            break;
-          }
-          // Append token to last assistant message
+          if (data.startsWith("[ERROR]")) { toast(data.slice(7).trim(), "error"); break; }
           setMessages((prev) => {
             const updated = [...prev];
             updated[updated.length - 1] = {
@@ -122,6 +110,7 @@ export default function Advisor() {
       toast(e.message, "error");
     } finally {
       setStreaming(false);
+      inputRef.current?.focus();
     }
   }
 
@@ -142,60 +131,92 @@ export default function Advisor() {
     }
   }
 
+  const TypingDots = () => (
+    <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center', padding: '2px 0' }}>
+      {[0, 1, 2].map(i => (
+        <span key={i} style={{
+          width: 6, height: 6, borderRadius: '50%', background: 'var(--text-muted)',
+          animation: 'pulse 1.2s ease-in-out infinite',
+          animationDelay: `${i * 0.2}s`,
+        }} />
+      ))}
+    </span>
+  );
+
   return (
     <div className="view-advisor">
       <div className="advisor-layout">
-        {/* ── Sidebar: conversation history ── */}
+        {/* Sidebar */}
         <aside className="advisor-sidebar">
           <div className="advisor-sidebar-header">
-            <span>Conversations</span>
-            <button className="btn-secondary" style={{ fontSize: 12, padding: "4px 10px" }}
-              onClick={newConversation}>
-              + New
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <MessageSquare size={16} style={{ color: 'var(--accent)' }} />
+              <span>Conversations</span>
+            </div>
+            <button
+              className="btn-primary"
+              style={{ fontSize: 12, padding: '6px 12px' }}
+              onClick={newConversation}
+            >
+              <Plus size={12} /> New
             </button>
           </div>
-          {loadingConvs ? (
-            <div className="skeleton" style={{ height: 40, margin: 8, borderRadius: 8 }} />
-          ) : conversations.length === 0 ? (
-            <div className="advisor-no-convs">No conversations yet</div>
-          ) : (
-            conversations.map((c) => (
-              <div key={c.id} style={{ display: 'flex', alignItems: 'center' }}>
-                <button
-                  className={`advisor-conv-item${activeId === c.id ? " active" : ""}`}
-                  onClick={() => openConversation(c.id)}
-                  style={{ flex: 1, minWidth: 0 }}>
-                  <div className="advisor-conv-title" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.title || "Conversation"}</div>
-                  <div className="advisor-conv-date">
-                    {new Date(c.updated_at).toLocaleDateString("en-IN")}
-                  </div>
-                </button>
-                <button className="btn-secondary" style={{ padding: '6px', marginLeft: '4px', border: 'none', background: 'transparent' }} onClick={(e) => deleteConversation(c.id, e)} title="Delete conversation">
-                  <Trash2 size={14} className="text-muted" />
-                </button>
+
+          <div style={{ overflowY: 'auto', maxHeight: '60vh' }}>
+            {loadingConvs ? (
+              <div style={{ padding: 16 }}>
+                <div className="skeleton" style={{ height: 56, borderRadius: 10 }} />
               </div>
-            ))
-          )}
+            ) : conversations.length === 0 ? (
+              <div style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13, fontWeight: 500 }}>
+                No conversations yet.<br />Ask your first question!
+              </div>
+            ) : (
+              conversations.map((c) => (
+                <div key={c.id} style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid var(--border)' }}>
+                  <button
+                    className={`advisor-conv-item${activeId === c.id ? " active" : ""}`}
+                    onClick={() => openConversation(c.id)}
+                    style={{ flex: 1, minWidth: 0 }}
+                  >
+                    <div className="advisor-conv-title">{c.title || "Conversation"}</div>
+                    <div className="advisor-conv-date">
+                      {new Date(c.updated_at).toLocaleDateString("en-IN")}
+                    </div>
+                  </button>
+                  <button
+                    onClick={(e) => deleteConversation(c.id, e)}
+                    title="Delete"
+                    style={{ padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', flexShrink: 0, transition: 'color 0.2s' }}
+                    onMouseEnter={e => e.currentTarget.style.color = 'var(--negative)'}
+                    onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
         </aside>
 
-        {/* ── Main chat area ── */}
+        {/* Main chat */}
         <div className="advisor-main">
-          <div className="page-title-block">
-            <h1 className="page-title">
-              <Sparkles size={22} style={{ verticalAlign: "middle", marginRight: 8, color: "var(--accent)" }} />
+          <div style={{ marginBottom: 24 }}>
+            <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
+              <div style={{ width: 40, height: 40, borderRadius: 12, background: 'linear-gradient(135deg, var(--accent), #c084fc)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Sparkles size={20} style={{ color: 'white' }} />
+              </div>
               Amadeus AI
             </h1>
-            <p className="page-subtitle">
-              Powered by {typeof window !== "undefined" && localStorage.getItem("llama_enabled") ? "local AI (private)" : "Claude AI"}
-            </p>
+            <p className="page-subtitle" style={{ marginBottom: 0 }}>Your personal financial advisor, powered by AI</p>
           </div>
 
-          {/* Suggestions shown when no messages */}
+          {/* Suggestion chips */}
           {messages.length === 0 && (
             <div className="advisor-suggestions">
               {SUGGESTIONS.map((q) => (
                 <button key={q} className="suggestion-chip"
-                  onClick={() => { setInput(q); }}>
+                  onClick={() => { setInput(q); inputRef.current?.focus(); }}>
                   {q}
                 </button>
               ))}
@@ -205,8 +226,17 @@ export default function Advisor() {
           {/* Chat window */}
           <div className="chat-window" ref={chatRef}>
             {messages.length === 0 && (
-              <div className="chat-empty">{SYSTEM_NOTE}</div>
+              <div className="chat-empty" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, margin: 'auto', textAlign: 'center' }}>
+                <div style={{ width: 56, height: 56, borderRadius: 16, background: 'linear-gradient(135deg, #eff6ff, #e0e7ff)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Sparkles size={24} style={{ color: 'var(--accent)' }} />
+                </div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>How can I help you today?</div>
+                <div style={{ fontSize: 13, color: 'var(--text-muted)', maxWidth: 300, lineHeight: 1.6 }}>
+                  Your financial data is loaded. Ask me anything about your spending, savings, or budgets.
+                </div>
+              </div>
             )}
+
             {messages.map((m, i) => (
               <div key={i} className={`chat-bubble ${m.role}`}>
                 {m.role === "assistant" && (
@@ -215,11 +245,7 @@ export default function Advisor() {
                   </div>
                 )}
                 <div className="chat-text">
-                  {m.text || (streaming && i === messages.length - 1 && (
-                    <span className="typing-dots">
-                      <span /><span /><span />
-                    </span>
-                  ))}
+                  {m.text || (streaming && i === messages.length - 1 ? <TypingDots /> : "")}
                 </div>
               </div>
             ))}
@@ -228,6 +254,7 @@ export default function Advisor() {
           {/* Input */}
           <div className="chat-input-row">
             <input
+              ref={inputRef}
               className="chat-input"
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -235,8 +262,16 @@ export default function Advisor() {
               placeholder="Ask about your spending, savings, budgets…"
               disabled={streaming}
             />
-            <button className="btn-primary chat-send" onClick={send} disabled={streaming || !input.trim()}>
-              {streaming ? "…" : <Send size={15} />}
+            <button
+              className="btn-primary chat-send"
+              onClick={send}
+              disabled={streaming || !input.trim()}
+              style={{ borderRadius: 99, padding: '0 24px', minWidth: 56, height: 52 }}
+            >
+              {streaming
+                ? <span style={{ display: 'inline-flex', gap: 3 }}>{[0,1,2].map(i => <span key={i} style={{ width: 5, height: 5, borderRadius: '50%', background: 'white', opacity: 0.8, animation: 'pulse 1.2s ease-in-out infinite', animationDelay: `${i*0.2}s` }} />)}</span>
+                : <Send size={16} />
+              }
             </button>
           </div>
         </div>

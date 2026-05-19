@@ -1,28 +1,36 @@
 import React from "react";
 import { apiFetch, money } from "../lib";
 import { useToast } from "../components/ui";
-import { Plus, CreditCard, Wallet, Building2, PiggyBank, Trash2 } from "lucide-react";
+import { Plus, CreditCard, Wallet, Building2, PiggyBank, Trash2, ChevronRight } from "lucide-react";
 
 const ICONS = {
-  savings: <PiggyBank size={20} />,
-  current: <Building2 size={20} />,
-  credit: <CreditCard size={20} />,
-  wallet: <Wallet size={20} />,
-  cash: <Wallet size={20} />,
+  savings: PiggyBank,
+  current: Building2,
+  credit:  CreditCard,
+  wallet:  Wallet,
+  cash:    Wallet,
 };
 
 const COLORS = {
   savings: "#10b981",
-  current: "#3b82f6",
-  credit: "#f97316",
-  wallet: "#a855f7",
-  cash: "#6b7280",
+  current: "#4f46e5",
+  credit:  "#f97316",
+  wallet:  "#a855f7",
+  cash:    "#94a3b8",
+};
+
+const BG_COLORS = {
+  savings: "#ecfdf5",
+  current: "#eff6ff",
+  credit:  "#fff7ed",
+  wallet:  "#faf5ff",
+  cash:    "#f8fafc",
 };
 
 export default function Accounts() {
   const toast = useToast();
   const [accounts, setAccounts] = React.useState([]);
-  const [loading, setLoading] = React.useState(true);
+  const [loading,  setLoading]  = React.useState(true);
   const [showForm, setShowForm] = React.useState(false);
   const [form, setForm] = React.useState({
     name: "", account_type: "savings", institution: "", balance: "", currency: "INR",
@@ -31,8 +39,7 @@ export default function Accounts() {
 
   async function load() {
     try {
-      const data = await apiFetch("/accounts");
-      setAccounts(data);
+      setAccounts(await apiFetch("/accounts"));
     } catch (e) {
       toast(e.message, "error");
     } finally {
@@ -75,57 +82,80 @@ export default function Accounts() {
 
   return (
     <div className="view-accounts">
-      <div className="page-title-block">
-        <h1 className="page-title">Accounts</h1>
-        <p className="page-subtitle">Manage your bank accounts, wallets, and cards</p>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, marginBottom: 32 }}>
+        <div>
+          <h1 className="page-title">Accounts</h1>
+          <p className="page-subtitle" style={{ marginBottom: 0 }}>Manage your bank accounts, wallets, and cards</p>
+        </div>
+        <button className="btn-primary" onClick={() => setShowForm(!showForm)}>
+          <Plus size={16} /> Add Account
+        </button>
       </div>
 
-      {/* Total balance card */}
-      <div className="card hero-card" style={{ marginBottom: 20 }}>
-        <div className="hero-label"><Wallet size={15} /> Total Balance</div>
+      {/* Hero */}
+      <div className="card hero-card" style={{ marginBottom: 24 }}>
+        <div className="hero-label"><Wallet size={16} /> Total Balance Across All Accounts</div>
         <div className="hero-amount">{money(totalBalance)}</div>
-        <div className="hero-change positive">{accounts.length} active accounts</div>
+        <div className="hero-change positive">{accounts.length} active account{accounts.length !== 1 ? "s" : ""}</div>
       </div>
 
       {/* Account cards */}
-      <div className="account-grid" style={{ marginBottom: 20 }}>
-        {loading && Array.from({ length: 3 }).map((_, i) => (
-          <div className="card" key={i}>
-            <div className="skeleton" style={{ height: 20, width: "60%", borderRadius: 4, marginBottom: 12 }} />
-            <div className="skeleton" style={{ height: 30, width: "40%", borderRadius: 4 }} />
-          </div>
-        ))}
-        {!loading && accounts.map((acct) => (
-          <div className="card account-detail-card" key={acct.id}>
-            <div className="account-card-header">
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div className="account-type-icon" style={{ color: COLORS[acct.account_type] }}>
-                  {ICONS[acct.account_type]}
+      {loading ? (
+        <div className="account-grid">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div className="card" key={i} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div className="skeleton" style={{ height: 14, width: '50%', borderRadius: 6 }} />
+              <div className="skeleton" style={{ height: 30, width: '70%', borderRadius: 6 }} />
+              <div className="skeleton" style={{ height: 12, width: '35%', borderRadius: 6 }} />
+            </div>
+          ))}
+        </div>
+      ) : accounts.length === 0 ? (
+        <div className="card" style={{ textAlign: 'center', padding: '56px 24px' }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>🏦</div>
+          <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>No accounts yet</div>
+          <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>Add your first account to start tracking</div>
+        </div>
+      ) : (
+        <div className="account-grid" style={{ marginBottom: 24 }}>
+          {accounts.map((acct) => {
+            const IconComp = ICONS[acct.account_type] || Wallet;
+            const color    = COLORS[acct.account_type] || '#94a3b8';
+            const bg       = BG_COLORS[acct.account_type] || '#f8fafc';
+            return (
+              <div className="card account-card" key={acct.id}
+                style={{ borderTop: `3px solid ${color}` }}>
+                <div className="account-card-header">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ width: 44, height: 44, borderRadius: 12, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color }}>
+                      <IconComp size={22} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{acct.name}</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 500, textTransform: 'capitalize' }}>
+                        {acct.institution || acct.account_type}
+                      </div>
+                    </div>
+                  </div>
+                  <button className="tx-delete-btn" onClick={() => remove(acct.id)} aria-label={`Remove ${acct.name}`}>
+                    <Trash2 size={14} />
+                  </button>
                 </div>
-                <div>
-                  <div className="account-detail-name">{acct.name}</div>
-                  <div className="account-detail-type">{acct.institution || acct.account_type}</div>
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, fontWeight: 700, color, marginTop: 4 }}>
+                  {money(acct.balance)}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.05em' }}>
+                  {acct.currency} · {acct.account_type.toUpperCase()}
                 </div>
               </div>
-              <button className="tx-delete-btn" onClick={() => remove(acct.id)} aria-label={`Remove ${acct.name}`}>
-                <Trash2 size={13} />
-              </button>
-            </div>
-            <div className="account-amount" style={{ color: COLORS[acct.account_type] }}>
-              {money(acct.balance)}
-            </div>
-            <div className="account-change muted">{acct.currency} · {acct.account_type}</div>
-          </div>
-        ))}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
-      {/* Add account */}
-      {!showForm ? (
-        <button className="btn-primary" onClick={() => setShowForm(true)} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <Plus size={14} /> Add Account
-        </button>
-      ) : (
-        <div className="card" style={{ marginTop: 12 }}>
+      {/* Add form */}
+      {showForm && (
+        <div className="card" style={{ marginTop: 8 }}>
           <div className="form-section-title">New Account</div>
           <form onSubmit={create}>
             <div className="form-grid-2">
@@ -153,7 +183,7 @@ export default function Accounts() {
                   onChange={(e) => setForm({ ...form, institution: e.target.value })} />
               </div>
               <div className="form-field">
-                <label className="form-label">Balance</label>
+                <label className="form-label">Opening Balance</label>
                 <div className="input-prefix-wrap">
                   <span className="input-prefix">₹</span>
                   <input type="number" placeholder="0" value={form.balance}
@@ -161,7 +191,7 @@ export default function Accounts() {
                 </div>
               </div>
             </div>
-            <div className="form-actions">
+            <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
               <button type="submit" className="btn-primary" disabled={saving}>
                 {saving ? "Adding…" : "Add Account"}
               </button>
