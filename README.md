@@ -105,16 +105,14 @@ npm run dev
 
 App is live at **http://127.0.0.1:5173** — backend API at **http://127.0.0.1:8000/docs**.
 
-### 4. (Optional) Local AI
+### 4. (Optional) Configure AI Providers
 
-Ledger natively embeds `llama-cpp-python` for local, offline AI (no external server required!).
-
-1. Download a text GGUF model (e.g., Qwen2.5-1.5B-Instruct).
-2. Set the variables in `backend/.env`:
+Ledger uses a multi-provider fallback router for maximum availability and zero cost. Set at least one of these keys in your `backend/.env` file:
 
 ```bash
-LLAMA_ENABLED=true
-LLAMA_MODEL_PATH="C:\absolute\path\to\qwen2.5-1.5b-instruct-q4_k_m.gguf"
+GROQ_API_KEY="your_groq_key"
+GEMINI_API_KEY="your_gemini_key"
+CEREBRAS_API_KEY="your_cerebras_key"
 ```
 
 ## Environment Variables
@@ -125,9 +123,9 @@ LLAMA_MODEL_PATH="C:\absolute\path\to\qwen2.5-1.5b-instruct-q4_k_m.gguf"
 | `AUTH_PROVIDER` | Yes | `dev` | Auth mode: `dev`, `supabase`, or `firebase` |
 | `ENVIRONMENT` | No | `development` | `development`, `staging`, or `production` |
 | `CORS_ORIGINS` | No | `http://localhost:5173` | Comma-separated allowed origins |
-| `ANTHROPIC_API_KEY` | No | — | Anthropic API key for cloud AI |
-| `LLAMA_ENABLED` | No | `false` | Enable local llama-cpp-python inference |
-| `LLAMA_MODEL_PATH` | No | `models/qwen2...` | Path to your local GGUF model file |
+| `GROQ_API_KEY` | No | — | Groq API key (primary) |
+| `GEMINI_API_KEY` | No | — | Gemini API key (multimodal extraction) |
+| `CEREBRAS_API_KEY` | No | — | Cerebras API key (high speed fallback) |
 | `SUPABASE_JWKS_URL` | If Supabase | — | Supabase JWKS URL for JWT verification |
 | `FIREBASE_PROJECT_ID` | If Firebase | — | Firebase project ID for JWT verification |
 | `REDIS_URL` | No | `redis://localhost:6379/0` | Redis URL for caching |

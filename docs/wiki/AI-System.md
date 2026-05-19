@@ -2,10 +2,10 @@
 
 ## Overview
 
-Ledger uses a hybrid AI architecture that prioritizes speed, cost, and privacy. Every AI operation follows a 4-layer fallback chain:
+Ledger uses a hybrid AI architecture that prioritizes speed, cost, and high availability. Every AI operation follows a robust fallback chain using a custom multi-provider AI router:
 
-```
-Request → Rule Engine/Regex → PaddleOCR (if image) → Local Text LLM (llama.cpp) → Cloud LLM (Anthropic) → Graceful Fallback
+```text
+Request → Rule Engine/Regex → PaddleOCR (if image) → Multi-Provider AI Router (Groq → Cerebras → Gemini → Cohere → OpenRouter) → Graceful Fallback
 ```
 
 ## Layer 1: Rule Engine
@@ -21,42 +21,27 @@ Zero-latency deterministic rules handle ~70% of operations:
 
 **When rules are sufficient, the LLM is never called.**
 
-## Layer 2: Local LLM (llama.cpp)
+## Layer 2: Multi-Provider AI Router (`services/ai_router.py`)
 
-For operations that need language understanding:
+For operations that need language understanding, Ledger uses a custom AI router that cascades through free-tier AI providers. This ensures high availability and zero cost by falling back seamlessly if one provider is down or rate-limited.
 
-| Setting | Value |
-|---|---|
-| Engine | Embedded `llama-cpp-python` |
-| Path | `LLAMA_MODEL_PATH` |
-| Text Model | Qwen2.5-1.5B-Instruct Q4_K_M |
-| VRAM | ~1.5GB for 1.5B model |
+**Fallback Chain:**
+1. **Groq** (`llama-3.1-8b-instant`) — Extremely fast, primary choice for extraction and categorization.
+2. **Cerebras** (`llama-3.3-70b`) — High intelligence, ultra-low latency fallback.
+3. **Gemini** (`gemini-1.5-flash`) — Robust multimodal model used for extraction and enrichment.
+4. **Cohere** (`command-r-plus-08-2024`) — High quality fallback.
+5. **OpenRouter** (`meta-llama/llama-3-8b-instruct:free`) — Final fallback.
 
-**Activation:** Set `LLAMA_ENABLED=true` in `.env`
+**Activation:** Set at least one provider API key (e.g., `GROQ_API_KEY`) in `.env`.
 
 ### Used For
 - Complex transaction categorization
 - Proactive financial insights
 - Structuring raw OCR text from receipts
 - Bill negotiation strategies
-- Bill negotiation strategies
-
-## Layer 3: Cloud LLM (Anthropic)
-
-Used when local LLM is unavailable or for high-quality conversations:
-
-| Setting | Value |
-|---|---|
-| Model | Claude 3.5 Sonnet |
-| Rate Limit | `ADVISOR_RATE_LIMIT` (default: `10/minute`) |
-| Key | `ANTHROPIC_API_KEY` |
-
-### Used For
 - Amadeus AI conversations (SSE streaming)
-- Complex multi-step reasoning
-- Fallback for local LLM failures
 
-## Layer 4: Graceful Degradation
+## Layer 3: Graceful Degradation
 
 **No endpoint ever returns a 500 due to AI unavailability.** When all AI layers fail:
 - Auto-categorizer returns `"Other"` with low confidence
@@ -68,7 +53,7 @@ Used when local LLM is unavailable or for high-quality conversations:
 
 ### Auto-Categorizer (`services/auto_categorizer.py`)
 
-```
+```text
 Description → Keyword Rules (instant)
                  ↓ if "Other" or low confidence
               LLM categorization with JSON schema
@@ -84,12 +69,13 @@ Generates 4 insight types from spending data:
 - ✅ **Positive** — Good financial habits
 - ℹ️ **Info** — Interesting trends
 
-### Receipt OCR (`services/receipt_ocr.py`)
+### Receipt OCR (`services/receipt_ocr.py` & `services/statements.py`)
 
-Uses multimodal vision model (Qwen2-VL-compatible):
-1. Accepts base64 image
-2. Extracts: merchant, amount, date, items, category
-3. Returns structured `ReceiptResult` schema
+Uses a two-step OCR to LLM extraction pipeline:
+1. Accepts image or PDF
+2. **PaddleOCR / Tesseract** extracts raw text boundaries
+3. Extracted raw text is sent to the AI Router to be semantically enriched and structured.
+4. Returns structured schema (merchant, amount, date, items, category)
 
 ### Bill Negotiator (`services/bill_negotiator.py`)
 
@@ -126,11 +112,12 @@ Every AI service uses a strict system prompt that:
 
 ## Configuration Summary
 
-| Variable | Required | Default | Impact |
-|---|---|---|---|
-| `LLAMA_ENABLED` | No | `false` | Enables local AI |
-| `LLAMA_SERVER_URL` | No | `http://127.0.0.1:8080` | llama.cpp endpoint |
-| `ANTHROPIC_API_KEY` | No | — | Enables cloud AI |
-| `ADVISOR_RATE_LIMIT` | No | `10/minute` | Cloud AI throttle |
+| Variable | Required | Impact |
+|---|---|---|
+| `GROQ_API_KEY` | No | Enables Groq fallback layer |
+| `CEREBRAS_API_KEY` | No | Enables Cerebras fallback layer |
+| `GEMINI_API_KEY` | No | Enables Gemini fallback layer |
+| `COHERE_API_KEY` | No | Enables Cohere fallback layer |
+| `OPENROUTER_API_KEY` | No | Enables OpenRouter fallback layer |
 
 **Minimum viable setup:** No AI configured. The app works fully with rule-based features only.
