@@ -28,8 +28,8 @@ and get AI-powered financial insights — all with local-first privacy.
 │                                                                     │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────────┐   │
 │  │ Auth     │  │ CRUD     │  │ Import   │  │ AI Router        │   │
-│  │ Guard    │  │ Endpoints│  │ Pipeline │  │ (rules → local   │   │
-│  │ (JWT/dev)│  │ (35+)    │  │ (CSV/PDF)│  │  → cloud → fail) │   │
+│  │ Guard    │  │ Endpoints│  │ Pipeline │  │ (rules → Groq    │   │
+│  │(Supabase)│  │ (35+)    │  │ (CSV/PDF)│  │  → Cerebras →..) │   │
 │  └──────────┘  └──────────┘  └──────────┘  └───────┬──────────┘   │
 │                                                     │              │
 │  ┌──────────────────────────────────────────────────▼────────────┐ │
@@ -46,11 +46,10 @@ and get AI-powered financial insights — all with local-first privacy.
                                 │
         ┌───────────────────────┼──────────────────────┐
         ▼                       ▼                      ▼
-┌──────────────┐  ┌─────────────────────┐  ┌────────────────────┐
-│  PostgreSQL  │  │  llama.cpp server   │  │  Anthropic API     │
-│  (SQLAlchemy)│  │  (local inference)  │  │  (cloud fallback)  │
-│              │  │  Qwen2.5-1.5B-Instr │  │  Claude 3.5 Sonnet │
-└──────────────┘  └─────────────────────┘  └────────────────────┘
+┌──────────────┐  ┌───────────────────────────┐  ┌───────────────────┐
+│  PostgreSQL  │  │ Multi-Provider AI Router  │  │ PaddleOCR Engine  │
+│  (psycopg2)  │  │ (Groq/Cerebras/Gemini/..) │  │ (Receipt Scanning)│
+└──────────────┘  └───────────────────────────┘  └───────────────────┘
 ```
 
 ## Features
