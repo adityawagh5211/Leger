@@ -5,6 +5,7 @@ import hashlib
 import logging
 import sys
 from datetime import date
+from decimal import Decimal
 
 class SimpleLRUCache:
     def __init__(self, maxsize=256):
@@ -148,6 +149,88 @@ def _tx_query(db: Session, user_id: str, month: str | None = None):
     return q.order_by(Transaction.date.desc(), Transaction.created_at.desc())
 
 
+def _get_balance_at(
+    db: Session,
+    user_id: str,
+    as_of_date: date | None = None,
+    exclude_id: str | None = None,
+) -> Decimal | None:
+    """
+    Returns the true running balance for a user as of (but NOT including)
+    `as_of_date`. If `as_of_date` is None, returns the current balance.
+
+    Strategy (pure SQL, no Python ordering tricks):
+    1. Find the LAST transaction that has a bank-reported running_balance,
+       ordered strictly by (date DESC, created_at DESC, stmt_seq DESC NULLS LAST).
+       This is our "anchor" — the most recently known authoritative balance.
+    2. Sum all transactions that came in STRICTLY AFTER the anchor row
+       (same ordering criteria, using anchors values as the inequality boundary)
+       to compute the net_change since that anchor.
+    3. Return anchor.running_balance + net_change.
+    """
+    from sqlalchemy import func, case, and_, or_
+
+    # ── Step 1: find the anchor row ──
+    anchor_q = db.query(Transaction).filter(
+        Transaction.user_id == user_id,
+        Transaction.running_balance.isnot(None),
+        Transaction.source != "cash",
+    )
+    if as_of_date:
+        anchor_q = anchor_q.filter(Transaction.date < as_of_date)
+    if exclude_id:
+        anchor_q = anchor_q.filter(Transaction.id != exclude_id)
+
+    anchor = anchor_q.order_by(
+        Transaction.date.desc(),
+        Transaction.created_at.desc(),
+        Transaction.stmt_seq.desc().nulls_last(),
+    ).first()
+
+    if anchor is None:
+        return None
+
+    # ── Step 2: sum all transactions AFTER the anchor ──
+    # "after" means: date > anchor.date
+    #              OR (date == anchor.date AND created_at > anchor.created_at)
+    #              OR (date == anchor.date AND created_at == anchor.created_at
+    #                  AND COALESCE(stmt_seq, MAX_INT) > COALESCE(anchor.stmt_seq, MAX_INT))
+    anchor_seq = anchor.stmt_seq if anchor.stmt_seq is not None else 2_147_483_647
+
+    after_filter = or_(
+        Transaction.date > anchor.date,
+        and_(
+            Transaction.date == anchor.date,
+            Transaction.created_at > anchor.created_at,
+        ),
+        and_(
+            Transaction.date == anchor.date,
+            Transaction.created_at == anchor.created_at,
+            func.coalesce(Transaction.stmt_seq, 2147483647) > anchor_seq,
+        ),
+    )
+
+    post_q = db.query(Transaction).filter(
+        Transaction.user_id == user_id,
+        Transaction.id != anchor.id,
+        Transaction.source != "cash",
+        after_filter,
+    )
+    if as_of_date:
+        post_q = post_q.filter(Transaction.date < as_of_date)
+    if exclude_id:
+        post_q = post_q.filter(Transaction.id != exclude_id)
+
+    net_change = Decimal("0")
+    for tx in post_q.all():
+        if tx.type == "income":
+            net_change += tx.amount
+        else:
+            net_change -= tx.amount
+
+    return anchor.running_balance + net_change
+
+
 def _history_start(range_key: str | None) -> date | None:
     from datetime import timedelta, date as dt_date
 
@@ -277,9 +360,21 @@ def create_transaction(
 ):
     tx = Transaction(user_id=user.id, **payload.model_dump())
     db.add(tx)
+    db.flush()  # assign tx.id before backfill query
+
+    # Backfill running_balance so the DB is always the source of truth.
+    # running_balance = (last known balance) ± this transaction's amount.
+    if tx.running_balance is None and tx.source != "cash":
+        prior_balance = _get_balance_at(db, user.id, as_of_date=None, exclude_id=tx.id)
+        if prior_balance is not None:
+            if tx.type == "income":
+                tx.running_balance = prior_balance + tx.amount
+            else:
+                tx.running_balance = prior_balance - tx.amount
+
     db.commit()
     db.refresh(tx)
-    logger.info("transaction.created user=%s id=%s amount=%s", user.id, tx.id, tx.amount)
+    logger.info("transaction.created user=%s id=%s amount=%s balance=%s", user.id, tx.id, tx.amount, tx.running_balance)
     return tx
 
 
@@ -361,66 +456,16 @@ def get_summary(
     budgets = db.query(Budget).filter(Budget.user_id == user.id).all()
     summary = monthly_summary(transactions)
 
-    from decimal import Decimal
-
-    def _calculate_balance_at(db_session, user_id, as_of_date: date | None = None) -> Decimal | None:
-        """Calculates the true balance up to (but not including) as_of_date. If as_of_date is None, up to now."""
-        base_query = db_session.query(Transaction).filter(
-            Transaction.user_id == user_id,
-            Transaction.running_balance.isnot(None)
-        )
-        if as_of_date:
-            base_query = base_query.filter(Transaction.date < as_of_date)
-            
-        last_known_tx = base_query.order_by(
-            Transaction.date.desc(),
-            Transaction.created_at.desc(),
-            Transaction.stmt_seq.desc()
-        ).first()
-
-        if not last_known_tx:
-            return None
-
-        subsequent_query = db_session.query(Transaction).filter(
-            Transaction.user_id == user_id,
-            Transaction.date >= last_known_tx.date
-        )
-        if as_of_date:
-            subsequent_query = subsequent_query.filter(Transaction.date < as_of_date)
-            
-        net_change = Decimal("0")
-        for tx in subsequent_query.all():
-            if tx.id == last_known_tx.id:
-                continue
-            is_after = False
-            if tx.date > last_known_tx.date:
-                is_after = True
-            elif tx.date == last_known_tx.date:
-                if tx.created_at > last_known_tx.created_at:
-                    is_after = True
-                elif tx.created_at == last_known_tx.created_at:
-                    if (tx.stmt_seq or 0) > (last_known_tx.stmt_seq or 0):
-                        is_after = True
-                    elif tx.id > last_known_tx.id and (tx.stmt_seq or 0) == (last_known_tx.stmt_seq or 0):
-                        is_after = True
-                        
-            if is_after:
-                if tx.type == "income":
-                    net_change += tx.amount
-                else:
-                    net_change -= tx.amount
-                    
-        return last_known_tx.running_balance + net_change
-
-    period_end = None
-    period_start_d = None
+    summary["closing_balance"] = _get_balance_at(db, user.id, as_of_date=None)
+    summary["opening_balance"] = None
     if month:
         period_start_d, period_end = _month_range(month)
+        summary["closing_balance"] = _get_balance_at(db, user.id, as_of_date=period_end)
+        summary["opening_balance"] = _get_balance_at(db, user.id, as_of_date=period_start_d)
     elif range:
         period_start_d = _history_start(range)
-
-    summary["closing_balance"] = _calculate_balance_at(db, user.id, period_end)
-    summary["opening_balance"] = _calculate_balance_at(db, user.id, period_start_d) if period_start_d else None
+        if period_start_d:
+            summary["opening_balance"] = _get_balance_at(db, user.id, as_of_date=period_start_d)
 
     return {
         **summary,
@@ -552,7 +597,17 @@ async def import_statement(
                     .first()
                 )
                 if not duplicate:
-                    db.add(Transaction(user_id=user.id, **validated))
+                    new_tx = Transaction(user_id=user.id, **validated)
+                    # Backfill running_balance for rows where the parsed PDF/CSV
+                    # had no Balance column (e.g. receipt PDFs, Spotify invoices).
+                    if new_tx.running_balance is None and new_tx.source != "cash":
+                        prior_bal = _get_balance_at(db, user.id, as_of_date=None)
+                        if prior_bal is not None:
+                            if new_tx.type == "income":
+                                new_tx.running_balance = prior_bal + new_tx.amount
+                            else:
+                                new_tx.running_balance = prior_bal - new_tx.amount
+                    db.add(new_tx)
                     saved_count += 1
 
             db.commit()

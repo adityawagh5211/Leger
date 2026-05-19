@@ -15,7 +15,7 @@ export default function Dashboard({ analyticsOnly = false }) {
   const toast = useToast();
   const [summary, setSummary] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
-  const [timeRange, setTimeRange] = React.useState("3m");
+  const [timeRange, setTimeRange] = React.useState("this_month");
 
   React.useEffect(() => {
     setLoading(true);
