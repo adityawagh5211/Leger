@@ -16,7 +16,7 @@ export default function Budgets() {
     try {
       const [bud, sum] = await Promise.all([
         apiFetch("/budgets"),
-        apiFetch("/summary"),
+        apiFetch("/summary?range=this_month"),
       ]);
       setBudgets(bud);
       setSummary(sum);

@@ -5,8 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.0] - 2026-05-17
+## [Unreleased]
 
+### Added
+- Dashboard time-range filters (This Month, 3 Months, Current Year, All Time)
+- Delete functionality for Amadeus AI conversations
+
+### Changed
+- Renamed "AI Advisor" to "Amadeus AI" across the platform
+- Improved AI Advisor context injection to explicitly include current date to prevent temporal hallucinations
+
+### Fixed
+- Fixed bug where Budget progress tracked all-time spending instead of current monthly spending
+- Fixed cascade delete error when removing Amadeus AI conversations
+
+## [1.0.0] - 2026-05-17
 ### Added
 
 #### Core Platform

@@ -59,10 +59,21 @@ class StatementRow(BaseModel):
 
 
 def _parse_date_value(value) -> date | None:
+    raw = str(value or "").strip()
+    for fmt in ("%d/%m/%Y", "%d-%m-%Y", "%d/%m/%y", "%d-%m-%y", "%d %b %Y", "%d%b%Y", "%d%b%y"):
+        try:
+            parsed = datetime.strptime(raw, fmt).date()
+            return parsed if parsed <= date.today() else None
+        except ValueError:
+            continue
     parsed = pd.to_datetime(value, errors="coerce", dayfirst=True)
     if pd.isna(parsed):
         return None
-    return parsed.date()
+    parsed_date = parsed.date()
+    if parsed_date > date.today():
+        logger.warning("Statement row skipped with future date=%s raw=%s", parsed_date, raw)
+        return None
+    return parsed_date
 
 
 # ── Structured table parser ───────────────────────────────────────────────────

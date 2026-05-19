@@ -149,15 +149,20 @@ def _tx_query(db: Session, user_id: str, month: str | None = None):
 
 
 def _history_start(range_key: str | None) -> date | None:
-    from datetime import timedelta
+    from datetime import timedelta, date as dt_date
 
+    today = dt_date.today()
+    if range_key == "this_month":
+        return today.replace(day=1)
+    if range_key == "current_year":
+        return today.replace(month=1, day=1)
     if not range_key or range_key == "3m":
-        return date.today() - timedelta(days=92)
+        return today - timedelta(days=92)
     if range_key == "1y":
-        return date.today() - timedelta(days=365)
+        return today - timedelta(days=365)
     if range_key == "all":
         return None
-    raise HTTPException(status_code=400, detail="range must be 3m, 1y, or all")
+    raise HTTPException(status_code=400, detail="range must be this_month, 3m, current_year, 1y, or all")
 
 
 def _cursor_encode(tx: Transaction) -> str:
@@ -168,6 +173,47 @@ def _cursor_decode(cursor: str) -> tuple[date, str]:
     decoded = base64.urlsafe_b64decode(cursor.encode()).decode()
     date_str, tx_id = decoded.split("|", 1)
     return date.fromisoformat(date_str), tx_id
+
+
+def _wants_last_transaction(question: str) -> bool:
+    text = question.lower()
+    return "last transaction" in text or "latest transaction" in text or "most recent transaction" in text
+
+
+def _wants_overspending(question: str) -> bool:
+    text = question.lower()
+    return "overspending" in text or "spending most" in text or "spent most" in text or "most spend" in text
+
+
+def _format_transaction(tx: Transaction) -> str:
+    direction = "income" if tx.type == "income" else "expense"
+    return (
+        f"Your latest transaction is {direction} of INR {tx.amount} on {tx.date.isoformat()} "
+        f"for {tx.description} in {tx.category}."
+    )
+
+
+def _format_overspending(transactions: list[Transaction]) -> str:
+    from collections import defaultdict
+
+    totals = defaultdict(lambda: {"amount": 0, "count": 0})
+    dates = [tx.date for tx in transactions]
+    for tx in transactions:
+        if tx.type != "expense":
+            continue
+        totals[tx.category]["amount"] += float(tx.amount)
+        totals[tx.category]["count"] += 1
+    if not totals:
+        return "No expense transactions were found for this signed-in account."
+    ranked = sorted(totals.items(), key=lambda item: item[1]["amount"], reverse=True)
+    top = ranked[0]
+    runners = ", ".join(f"{cat}: INR {data['amount']:.0f}" for cat, data in ranked[1:4])
+    extra = f" Next highest: {runners}." if runners else ""
+    period = f" from {min(dates).isoformat()} to {max(dates).isoformat()}" if dates else ""
+    return (
+        f"You are spending most{period} in {top[0]}: INR {top[1]['amount']:.0f} "
+        f"across {top[1]['count']} transactions.{extra}"
+    )
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
@@ -302,10 +348,16 @@ def budget_suggestions(
 @app.get("/summary")
 def get_summary(
     month: str | None = None,
+    range: str | None = None,
     user: UserContext = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    transactions = _tx_query(db, user.id, month).all()
+    q = _tx_query(db, user.id, month)
+    if not month and range:
+        start = _history_start(range)
+        if start:
+            q = q.filter(Transaction.date >= start)
+    transactions = q.all()
     budgets = db.query(Budget).filter(Budget.user_id == user.id).all()
     summary = monthly_summary(transactions)
     return {
@@ -489,6 +541,31 @@ async def advisor_stream(
     transactions = _tx_query(db, user.id).limit(500).all()
     budgets = db.query(Budget).filter(Budget.user_id == user.id).all()
 
+    if _wants_last_transaction(question):
+        latest = transactions[0] if transactions else None
+        answer = _format_transaction(latest) if latest else "No transactions were found for this signed-in account."
+        async def last_tx_event_generator():
+            yield f"data: {answer}\n\n"
+            yield "data: [DONE]\n\n"
+
+        return StreamingResponse(
+            last_tx_event_generator(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache"},
+        )
+
+    if _wants_overspending(question):
+        answer = _format_overspending(transactions)
+        async def overspending_event_generator():
+            yield f"data: {answer}\n\n"
+            yield "data: [DONE]\n\n"
+
+        return StreamingResponse(
+            overspending_event_generator(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache"},
+        )
+
     context = build_advisor_context(transactions, budgets)
 
     # Load conversation history if continuing a thread
@@ -556,7 +633,7 @@ async def advisor_stream(
     async def event_generator():
         full_reply = []
         try:
-            async for token in ai_router.stream(SYSTEM_PROMPT, messages[1:]):
+            async for token in ai_router.stream(SYSTEM_PROMPT, messages):
                 full_reply.append(token)
                 yield f"data: {token}\n\n"
         except Exception as e:
@@ -620,6 +697,28 @@ def get_conversation_messages(
         raise HTTPException(status_code=404, detail="Conversation not found")
     return sorted(conv.messages, key=lambda m: m.created_at)
 
+
+@app.delete("/conversations/{conv_id}")
+def delete_conversation(
+    conv_id: str,
+    user: UserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    conv = (
+        db.query(AIConversation)
+        .filter(
+            AIConversation.id == conv_id,
+            AIConversation.user_id == user.id,
+        )
+        .first()
+    )
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    
+    db.delete(conv)
+    db.commit()
+    logger.info("conversation.deleted user=%s id=%s", user.id, conv_id)
+    return {"deleted": True}
 
 # ── Accounts (Multi-Account Support) ─────────────────────────────────────────
 @app.get("/accounts", response_model=list[AccountOut])

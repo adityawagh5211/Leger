@@ -67,7 +67,7 @@ async def generate_proactive_insights(
     if settings.anthropic_api_key:
         try:
             context_lines = [
-                f"Period: {date.today().strftime('%B %Y')}",
+                f"Period: {summary.get('period_start') or 'n/a'} to {summary.get('period_end') or 'n/a'}",
                 f"Income: ₹{summary['income']} | Expenses: ₹{summary['expenses']} | Net: ₹{summary['net']}",
                 f"Spending trend: {'up' if trend_pct > 0 else 'down'} {abs(trend_pct):.0f}% vs last month",
             ]

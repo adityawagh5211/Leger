@@ -28,8 +28,15 @@ const VIEWS = [
   { id: "credit",       label: "Health",          Icon: Gauge },
   { id: "export",       label: "Export",          Icon: Download },
   { id: "audit",        label: "Audit",           Icon: Shield },
-  { id: "advisor",      label: "AI Advisor",      Icon: Sparkles },
+  { id: "advisor",      label: "Amadeus AI",      Icon: Sparkles },
 ];
+
+function clearSupabaseStorage() {
+  if (typeof window === "undefined") return;
+  Object.keys(window.localStorage)
+    .filter((key) => key.startsWith("sb-") || key.includes("supabase"))
+    .forEach((key) => window.localStorage.removeItem(key));
+}
 
 export default function App() {
   const toast = useToast();
@@ -41,13 +48,26 @@ export default function App() {
   const touchStart = React.useRef(null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setAuthToken(session?.access_token || null);
-      setLoadingAuth(false);
-    });
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => {
+        setSession(session);
+        setAuthToken(session?.access_token || null);
+      })
+      .catch((error) => {
+        console.warn("Supabase session restore failed", error);
+        clearSupabaseStorage();
+        setSession(null);
+        setAuthToken(null);
+      })
+      .finally(() => setLoadingAuth(false));
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "TOKEN_REFRESH_FAILED") {
+        clearSupabaseStorage();
+        setSession(null);
+        setAuthToken(null);
+        return;
+      }
       setSession(session);
       setAuthToken(session?.access_token || null);
     });
@@ -174,6 +194,19 @@ export default function App() {
       <button className="quick-add-fab" onClick={() => setSheetOpen(true)} aria-label="Add transaction">
         <Plus size={22} />
       </button>
+      <nav className="mobile-bottom-nav" aria-label="Primary mobile navigation">
+        {VIEWS.map(({ id, label, Icon }) => (
+          <button
+            key={id}
+            className={`mobile-nav-item${view === id ? " active" : ""}`}
+            onClick={() => setView(id)}
+            aria-current={view === id ? "page" : undefined}
+          >
+            <Icon size={18} aria-hidden="true" />
+            <span>{label}</span>
+          </button>
+        ))}
+      </nav>
       <QuickAddSheet
         open={sheetOpen}
         onClose={() => setSheetOpen(false)}

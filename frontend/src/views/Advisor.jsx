@@ -1,7 +1,7 @@
 import React from "react";
 import { API_BASE, apiFetch, authHeaders } from "../lib";
 import { useToast } from "../components/ui";
-import { Sparkles, Send } from "lucide-react";
+import { Sparkles, Send, Trash2 } from "lucide-react";
 
 const SUGGESTIONS = [
   "Where am I overspending most?",
@@ -130,6 +130,18 @@ export default function Advisor() {
     setMessages([]);
   }
 
+  async function deleteConversation(id, e) {
+    e.stopPropagation();
+    if (!window.confirm("Delete this conversation?")) return;
+    try {
+      await apiFetch(`/conversations/${id}`, { method: "DELETE" });
+      setConversations((prev) => prev.filter((c) => c.id !== id));
+      if (activeId === id) newConversation();
+    } catch (err) {
+      toast(err.message, "error");
+    }
+  }
+
   return (
     <div className="view-advisor">
       <div className="advisor-layout">
@@ -148,14 +160,20 @@ export default function Advisor() {
             <div className="advisor-no-convs">No conversations yet</div>
           ) : (
             conversations.map((c) => (
-              <button key={c.id}
-                className={`advisor-conv-item${activeId === c.id ? " active" : ""}`}
-                onClick={() => openConversation(c.id)}>
-                <div className="advisor-conv-title">{c.title || "Conversation"}</div>
-                <div className="advisor-conv-date">
-                  {new Date(c.updated_at).toLocaleDateString("en-IN")}
-                </div>
-              </button>
+              <div key={c.id} style={{ display: 'flex', alignItems: 'center' }}>
+                <button
+                  className={`advisor-conv-item${activeId === c.id ? " active" : ""}`}
+                  onClick={() => openConversation(c.id)}
+                  style={{ flex: 1, minWidth: 0 }}>
+                  <div className="advisor-conv-title" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.title || "Conversation"}</div>
+                  <div className="advisor-conv-date">
+                    {new Date(c.updated_at).toLocaleDateString("en-IN")}
+                  </div>
+                </button>
+                <button className="btn-secondary" style={{ padding: '6px', marginLeft: '4px', border: 'none', background: 'transparent' }} onClick={(e) => deleteConversation(c.id, e)} title="Delete conversation">
+                  <Trash2 size={14} className="text-muted" />
+                </button>
+              </div>
             ))
           )}
         </aside>
@@ -165,7 +183,7 @@ export default function Advisor() {
           <div className="page-title-block">
             <h1 className="page-title">
               <Sparkles size={22} style={{ verticalAlign: "middle", marginRight: 8, color: "var(--accent)" }} />
-              AI Advisor
+              Amadeus AI
             </h1>
             <p className="page-subtitle">
               Powered by {typeof window !== "undefined" && localStorage.getItem("llama_enabled") ? "local AI (private)" : "Claude AI"}
@@ -193,7 +211,7 @@ export default function Advisor() {
               <div key={i} className={`chat-bubble ${m.role}`}>
                 {m.role === "assistant" && (
                   <div className="chat-label">
-                    <Sparkles size={11} /> Ledger AI
+                    <Sparkles size={11} /> Amadeus AI
                   </div>
                 )}
                 <div className="chat-text">

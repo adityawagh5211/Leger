@@ -15,13 +15,15 @@ export default function Dashboard({ analyticsOnly = false }) {
   const toast = useToast();
   const [summary, setSummary] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
+  const [timeRange, setTimeRange] = React.useState("3m");
 
   React.useEffect(() => {
-    apiFetch("/summary")
+    setLoading(true);
+    apiFetch(`/summary?range=${timeRange}`)
       .then(setSummary)
       .catch((e) => toast(e.message, "error"))
       .finally(() => setLoading(false));
-  }, []);
+  }, [timeRange]);
 
   if (loading) {
     return (
@@ -45,6 +47,9 @@ export default function Dashboard({ analyticsOnly = false }) {
   const net = Number(summary?.net || 0);
   const saved = Math.max(0, income - expenses);
   const savingsRate = income > 0 ? Math.round((saved / income) * 100) : 0;
+  const periodLabel = summary?.period_start && summary?.period_end
+    ? `${summary.period_start} to ${summary.period_end}`
+    : "All available transactions";
 
   const byCategory = summary?.by_category || {};
   const pieRows = Object.entries(byCategory)
@@ -61,10 +66,17 @@ export default function Dashboard({ analyticsOnly = false }) {
       Income: Number(row.income),
       Expenses: Number(row.expenses),
     }));
+  const monthRows = Object.entries(summary?.by_month || {})
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([month, row]) => ({
+      month,
+      Income: Number(row.income),
+      Expenses: Number(row.expenses),
+    }));
 
   const kpiCards = [
-    { label: "Total Income", val: income, change: "This period", type: "positive", Icon: TrendingUp },
-    { label: "Total Expenses", val: expenses, change: "This period", type: "negative", Icon: TrendingDown },
+    { label: "Total Income", val: income, change: periodLabel, type: "positive", Icon: TrendingUp },
+    { label: "Total Expenses", val: expenses, change: periodLabel, type: "negative", Icon: TrendingDown },
     { label: "Money Saved", val: saved, change: income > 0 ? `${savingsRate}% of income` : "—", type: "positive", Icon: PiggyBank },
     { label: "Recurring", val: summary?.recurring?.length || 0, change: "Payments detected", type: "muted", Icon: Calendar },
   ];
@@ -73,7 +85,25 @@ export default function Dashboard({ analyticsOnly = false }) {
     <div className="view-dashboard">
       <div className="page-title-block">
         <h1 className="page-title">{analyticsOnly ? "Financial Analytics" : "Financial Dashboard"}</h1>
-        <p className="page-subtitle">{analyticsOnly ? "Detailed trends and patterns" : "Your financial picture at a glance"}</p>
+        <p className="page-subtitle">{analyticsOnly ? `Detailed trends and patterns, ${periodLabel}` : `Your financial picture from ${periodLabel}`}</p>
+      </div>
+
+      <div className="filter-row" style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
+        {[
+          { id: 'this_month', label: 'This Month' },
+          { id: '3m', label: '3 Months' },
+          { id: 'current_year', label: 'Current Year' },
+          { id: 'all', label: 'All Time' },
+        ].map(r => (
+          <button
+            key={r.id}
+            onClick={() => setTimeRange(r.id)}
+            className={`btn-secondary ${timeRange === r.id ? 'active' : ''}`}
+            style={timeRange === r.id ? { backgroundColor: 'var(--accent)', color: 'white', borderColor: 'var(--accent)', fontWeight: 500 } : { fontWeight: 500 }}
+          >
+            {r.label}
+          </button>
+        ))}
       </div>
 
       {/* Net worth hero */}
@@ -150,12 +180,12 @@ export default function Dashboard({ analyticsOnly = false }) {
       <div className="card">
         <div className="chart-card-header">
           <div>
-            <div className="chart-title">Cash Flow Trend</div>
-            <div className="chart-subtitle">Income and expenses over time</div>
+            <div className="chart-title">Monthly Cash Flow</div>
+            <div className="chart-subtitle">Income and expenses across {summary?.months_covered || 0} month(s)</div>
           </div>
         </div>
         <ResponsiveContainer width="100%" height={200}>
-          <AreaChart data={dayRows}>
+          <AreaChart data={monthRows.length > 1 ? monthRows : dayRows}>
             <defs>
               <linearGradient id="gInc" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#10b981" stopOpacity={0.2} />
@@ -167,7 +197,7 @@ export default function Dashboard({ analyticsOnly = false }) {
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-            <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
+            <XAxis dataKey={monthRows.length > 1 ? "month" : "date"} tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
             <YAxis tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
             <Tooltip formatter={(v) => money(v)} />
             <Area dataKey="Income" stroke="#10b981" fill="url(#gInc)" strokeWidth={2} />

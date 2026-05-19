@@ -9,7 +9,7 @@ const ACTIONS = [
   { id: "view-dashboard", label: "Go to Dashboard", desc: "Financial overview", view: "dashboard", Icon: LayoutDashboard },
   { id: "view-budgets", label: "Goals & Budgets", desc: "Manage spending limits", view: "budgets", Icon: Target },
   { id: "view-analytics", label: "Analytics", desc: "Spending trends & patterns", view: "analytics", Icon: BarChart3 },
-  { id: "ask-ai", label: "Ask AI Advisor", desc: "Get financial advice", view: "advisor", Icon: Sparkles },
+  { id: "ask-ai", label: "Ask Amadeus AI", desc: "Get financial advice", view: "advisor", Icon: Sparkles },
   { id: "scan-receipt", label: "Scan receipt", desc: "Extract data from receipt image", view: "transactions", Icon: Receipt },
   { id: "recategorize", label: "Re-categorize transactions", desc: "Use AI to fix 'Other' categories", view: "transactions", Icon: Sparkles },
   { id: "manage-accounts", label: "Manage accounts", desc: "Add or edit bank accounts", view: "accounts", Icon: Wallet },
