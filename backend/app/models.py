@@ -193,3 +193,27 @@ class Holding(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
     portfolio: Mapped["Portfolio"] = relationship(back_populates="holdings")
+
+
+class CategoryCorrection(Base):
+    """
+    Stores user-specific category overrides learned from manual corrections.
+
+    The ``description_hash`` is a SHA-256 digest of the lowercase, stripped
+    transaction description — this protects raw merchant names while still
+    enabling fast keyed lookup without exposing PII in the corrections table.
+    """
+
+    __tablename__ = "category_corrections"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    # SHA-256 hex digest of lower().strip() of the original description
+    description_hash: Mapped[str] = mapped_column(String(64), index=True)
+    category: Mapped[str] = mapped_column(String(64))
+    # How many times the user has confirmed this override (for confidence ranking)
+    correction_count: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    __table_args__ = (
+        UniqueConstraint("user_id", "description_hash", name="uq_cat_correction_user_hash"),
+    )

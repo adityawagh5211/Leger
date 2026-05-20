@@ -12,7 +12,9 @@ import ExportGST from "./views/ExportGST";
 import AuditWebhooks from "./views/AuditWebhooks";
 import Investments from "./views/Investments";
 import CreditBenchmarks from "./views/CreditBenchmarks";
+import Analytics from "./views/Analytics";
 import CommandPalette from "./components/CommandPalette";
+
 import {
   LayoutDashboard, Plus, Target, BarChart3, Sparkles,
   Wallet, Download, Shield, Command, Briefcase, Gauge, LogOut, Loader2, X, MoreHorizontal, Grid
@@ -102,7 +104,8 @@ export default function App() {
       case "dashboard":    return <Dashboard />;
       case "transactions": return <Transactions />;
       case "budgets":      return <Budgets />;
-      case "analytics":    return <Dashboard analyticsOnly />;
+      case "analytics":    return <Analytics />;
+
       case "accounts":     return <Accounts />;
       case "investments":  return <Investments />;
       case "credit":       return <CreditBenchmarks />;

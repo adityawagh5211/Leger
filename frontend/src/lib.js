@@ -38,27 +38,50 @@ export async function apiFetch(path, opts = {}) {
 
 // ── Query keys ───────────────────────────────────────────────────────────────
 export const KEYS = {
-  transactions: (params) => ["transactions", params],
-  budgets: () => ["budgets"],
-  summary: (month) => ["summary", month],
-  conversations: () => ["conversations"],
-  messages: (id) => ["messages", id],
-  importJob: (id) => ["importJob", id],
+  transactions:  (params) => ["transactions", params],
+  budgets:       ()       => ["budgets"],
+  summary:       (month)  => ["summary", month],
+  conversations: ()       => ["conversations"],
+  messages:      (id)     => ["messages", id],
+  importJob:     (id)     => ["importJob", id],
 };
 
-// ── Constants shared across components ───────────────────────────────────────
+// ── Constants shared across components (expanded to 18 categories) ────────────
 export const CATEGORIES = [
-  "Housing","Groceries","Transport","Dining","Subscriptions",
-  "Shopping","Health","Utilities","Entertainment","Other","Salary","Freelance",
+  "Housing", "Groceries", "Transport", "Dining", "Subscriptions",
+  "Shopping", "Health", "Utilities", "Entertainment",
+  "Education", "Insurance", "Investments", "Transfers", "Taxes", "Fees",
+  "Other", "Salary", "Freelance",
 ];
-export const EXPENSE_CATEGORIES = CATEGORIES.filter(
-  (c) => !["Salary", "Freelance"].includes(c)
-);
+
+export const EXPENSE_CATEGORIES = [
+  "Housing", "Groceries", "Transport", "Dining", "Subscriptions",
+  "Shopping", "Health", "Utilities", "Entertainment",
+  "Education", "Insurance", "Investments", "Transfers", "Taxes", "Fees",
+  "Other",
+];
+
+export const INCOME_CATEGORIES = ["Salary", "Freelance", "Other"];
+
 export const CATEGORY_COLORS = {
-  Housing:"#c084fc", Groceries:"#22c55e", Transport:"#38bdf8",
-  Dining:"#f97316", Subscriptions:"#a78bfa", Shopping:"#f472b6",
-  Health:"#14b8a6", Utilities:"#94a3b8", Entertainment:"#facc15",
-  Other:"#9ca3af", Salary:"#4ade80", Freelance:"#84cc16",
+  Housing:       "#c084fc",
+  Groceries:     "#22c55e",
+  Transport:     "#38bdf8",
+  Dining:        "#f97316",
+  Subscriptions: "#a78bfa",
+  Shopping:      "#f472b6",
+  Health:        "#14b8a6",
+  Utilities:     "#94a3b8",
+  Entertainment: "#facc15",
+  Education:     "#60a5fa",
+  Insurance:     "#34d399",
+  Investments:   "#4f46e5",
+  Transfers:     "#a8a29e",
+  Taxes:         "#f87171",
+  Fees:          "#fb923c",
+  Other:         "#9ca3af",
+  Salary:        "#4ade80",
+  Freelance:     "#84cc16",
 };
 
 export const money = (v) =>

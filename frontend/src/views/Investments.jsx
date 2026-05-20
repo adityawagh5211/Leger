@@ -3,8 +3,12 @@ import { apiFetch, money } from "../lib";
 import { useToast } from "../components/ui";
 import {
   Briefcase, TrendingUp, TrendingDown, Plus, Trash2,
-  BarChart3, PiggyBank, Bitcoin, Landmark, Award,
+  BarChart3, PiggyBank, Bitcoin, Landmark, Award, Activity, Zap,
 } from "lucide-react";
+import {
+  PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend,
+} from "recharts";
+
 
 const TYPE_META = {
   stocks:       { Icon: BarChart3,  color: "#4f46e5", bg: "#eff6ff",  label: "Stocks" },
@@ -16,24 +20,28 @@ const TYPE_META = {
 
 export default function Investments() {
   const toast = useToast();
-  const [portfolios, setPortfolios] = React.useState([]);
-  const [summary,    setSummary]    = React.useState(null);
-  const [loading,    setLoading]    = React.useState(true);
-  const [showForm,   setShowForm]   = React.useState(false);
-  const [form, setForm]     = React.useState({ name: "", portfolio_type: "stocks" });
-  const [selected, setSelected]     = React.useState(null);
-  const [holdings,  setHoldings]    = React.useState([]);
+  const [portfolios,  setPortfolios]  = React.useState([]);
+  const [summary,     setSummary]     = React.useState(null);
+  const [analytics,   setAnalytics]   = React.useState(null);
+  const [loading,     setLoading]     = React.useState(true);
+  const [showForm,    setShowForm]    = React.useState(false);
+  const [form,        setForm]        = React.useState({ name: "", portfolio_type: "stocks" });
+  const [selected,    setSelected]    = React.useState(null);
+  const [holdings,    setHoldings]    = React.useState([]);
   const [holdingForm, setHoldingForm] = React.useState(null);
-  const [saving,    setSaving]      = React.useState(false);
+  const [saving,      setSaving]      = React.useState(false);
+
 
   async function load() {
     try {
-      const [p, s] = await Promise.all([
+      const [p, s, a] = await Promise.all([
         apiFetch("/portfolios"),
         apiFetch("/portfolios/summary"),
+        apiFetch("/portfolios/analytics").catch(() => null),
       ]);
       setPortfolios(p);
       setSummary(s);
+      setAnalytics(a);
     } catch (e) { toast(e.message, "error"); }
     finally { setLoading(false); }
   }
@@ -116,16 +124,16 @@ export default function Investments() {
       {/* Summary */}
       {summary && (
         <div className="account-grid" style={{ marginBottom: 24 }}>
-          <div className="card hero-card" style={{ gridColumn: 'span 2', padding: '32px' }}>
+          <div className="card hero-card" style={{ gridColumn: "span 2", padding: "32px" }}>
             <div className="hero-label"><Briefcase size={16} /> Total Invested</div>
             <div className="hero-amount">{money(summary.total_invested)}</div>
-            <div className="hero-change muted" style={{ color: 'var(--text-secondary)' }}>
+            <div className="hero-change muted" style={{ color: "var(--text-secondary)" }}>
               {summary.portfolio_count} portfolio{summary.portfolio_count !== 1 ? "s" : ""}
             </div>
           </div>
-          <div className="card hero-card" style={{ gridColumn: 'span 2', padding: '32px' }}>
+          <div className="card hero-card" style={{ gridColumn: "span 2", padding: "32px" }}>
             <div className="hero-label">
-              {summary.total_pnl >= 0 ? <TrendingUp size={16} style={{ color: 'var(--positive)' }} /> : <TrendingDown size={16} style={{ color: 'var(--negative)' }} />}
+              {summary.total_pnl >= 0 ? <TrendingUp size={16} style={{ color: "var(--positive)" }} /> : <TrendingDown size={16} style={{ color: "var(--negative)" }} />}
               Current Value
             </div>
             <div className="hero-amount">{money(summary.total_current)}</div>
@@ -133,6 +141,112 @@ export default function Investments() {
               {summary.total_pnl >= 0 ? "+" : ""}{money(summary.total_pnl)} ({summary.total_pnl_pct}%)
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Portfolio Analytics */}
+      {analytics && (analytics.allocation?.length > 0 || analytics.sharpe_ratio != null) && (
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+            {/* Asset Allocation Donut */}
+            {analytics.allocation?.length > 0 && (
+              <div className="card" style={{ gridColumn: analytics.sharpe_ratio != null ? "1" : "1 / -1" }}>
+                <div className="chart-card-header" style={{ marginBottom: 8 }}>
+                  <div>
+                    <div className="chart-title">Asset Allocation</div>
+                    <div className="chart-subtitle">By investment type</div>
+                  </div>
+                </div>
+                <ResponsiveContainer width="100%" height={200}>
+                  <PieChart>
+                    <Pie data={analytics.allocation} dataKey="value" innerRadius={55} outerRadius={82} paddingAngle={3} strokeWidth={0}>
+                      {analytics.allocation.map((a, i) => {
+                        const colors = ["#6366f1","#10b981","#f59e0b","#ef4444","#8b5cf6"];
+                        return <Cell key={a.asset_type} fill={colors[i % colors.length]} />;
+                      })}
+                    </Pie>
+                    <Tooltip
+                      formatter={(val, name) => [money(val), name]}
+                      contentStyle={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12 }}
+                    />
+                    <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
+                  {analytics.allocation.map((a) => (
+                    <div key={a.asset_type} style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 600 }}>
+                      {a.asset_type}: {a.pct?.toFixed(1)}%
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Analytics KPIs */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {[
+                {
+                  label: "Total Return",
+                  val: analytics.total_return_pct != null ? `${analytics.total_return_pct > 0 ? "+" : ""}${analytics.total_return_pct?.toFixed(1)}%` : "—",
+                  sub: "vs invested capital",
+                  color: analytics.total_return_pct >= 0 ? "#10b981" : "#ef4444",
+                  Icon: TrendingUp,
+                },
+                {
+                  label: "Sharpe Ratio",
+                  val: analytics.sharpe_ratio != null ? analytics.sharpe_ratio.toFixed(2) : "—",
+                  sub: analytics.sharpe_ratio >= 1 ? "Excellent risk-adjusted return" : analytics.sharpe_ratio >= 0 ? "Acceptable" : "Below risk-free rate",
+                  color: "#6366f1",
+                  Icon: Activity,
+                },
+                {
+                  label: "XIRR",
+                  val: analytics.xirr != null ? `${(analytics.xirr * 100).toFixed(1)}%` : "—",
+                  sub: "Annualized IRR",
+                  color: "#f59e0b",
+                  Icon: Zap,
+                },
+                {
+                  label: "Max Drawdown",
+                  val: analytics.max_drawdown_pct != null ? `${analytics.max_drawdown_pct.toFixed(1)}%` : "—",
+                  sub: "Peak-to-trough loss",
+                  color: "#ef4444",
+                  Icon: TrendingDown,
+                },
+              ].map(({ label, val, sub, color, Icon }) => (
+                <div key={label} className="card" style={{ padding: "14px 18px", display: "flex", alignItems: "center", gap: 14 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 10, background: `${color}18`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <Icon size={18} style={{ color }} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", marginBottom: 1 }}>{label}</div>
+                    <div style={{ fontSize: 20, fontWeight: 800, color }}>{val}</div>
+                    <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{sub}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Best / Worst performers */}
+          {(analytics.best_performer || analytics.worst_performer) && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              {analytics.best_performer && (
+                <div className="card" style={{ padding: "14px 18px", borderLeft: "3px solid #10b981" }}>
+                  <div style={{ fontSize: 11, color: "#10b981", fontWeight: 700, marginBottom: 4 }}>🏆 Best Performer</div>
+                  <div style={{ fontSize: 15, fontWeight: 700 }}>{analytics.best_performer.symbol}</div>
+                  <div style={{ fontSize: 13, color: "#10b981", fontWeight: 600 }}>+{analytics.best_performer.return_pct?.toFixed(1)}% return</div>
+                </div>
+              )}
+              {analytics.worst_performer && (
+                <div className="card" style={{ padding: "14px 18px", borderLeft: "3px solid #ef4444" }}>
+                  <div style={{ fontSize: 11, color: "#ef4444", fontWeight: 700, marginBottom: 4 }}>📉 Worst Performer</div>
+                  <div style={{ fontSize: 15, fontWeight: 700 }}>{analytics.worst_performer.symbol}</div>
+                  <div style={{ fontSize: 13, color: "#ef4444", fontWeight: 600 }}>{analytics.worst_performer.return_pct?.toFixed(1)}% return</div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

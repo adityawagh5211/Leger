@@ -20,19 +20,40 @@ class Settings(BaseSettings):
     openrouter_api_key: str | None = None
     mistral_api_key: str | None = None
 
-    # Keep this so existing .env files don't break — but it won't be used
+    # Kept for .env compatibility — not actively used
     anthropic_api_key: str | None = None
 
-    # Redis
+    # Redis (optional — L2 cache, gracefully skipped if unavailable)
     redis_url: str = "redis://localhost:6379/0"
 
     # CORS — comma-separated list of allowed origins
-    cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173", "https://ledger-beta-two.vercel.app"]
+    cors_origins: list[str] = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "https://ledger-beta-two.vercel.app",
+    ]
 
     # Rate limiting
     advisor_rate_limit: str = "10/minute"
 
-    # Environment
+    # ── AI Intelligence Settings (v2) ─────────────────────────────────────────
+    # Local embeddings (sentence-transformers)
+    enable_local_embeddings: bool = True
+    embedding_model: str = "all-MiniLM-L6-v2"
+
+    # Categorization confidence threshold below which LLM is called
+    categorization_confidence_threshold: float = 0.85
+
+    # Proactive insights cache TTL in hours (per user)
+    insight_cache_ttl_hours: int = 4
+
+    # LLM cache TTL in seconds
+    llm_cache_ttl_seconds: int = 3600  # 1 hour
+
+    # Anomaly detection sensitivity (IQR multiplier — higher = less sensitive)
+    anomaly_iqr_multiplier: float = 1.5
+
+    # ── Environment ─────────────────────────────────────────────────────────────
     environment: str = "development"
     debug: bool = False
 
@@ -52,15 +73,13 @@ class Settings(BaseSettings):
                     file=sys.stderr,
                 )
                 sys.exit(1)
-            if not any(
-                [
-                    self.groq_api_key,
-                    self.cerebras_api_key,
-                    self.gemini_api_key,
-                    self.cohere_api_key,
-                    self.openrouter_api_key,
-                ]
-            ):
+            if not any([
+                self.groq_api_key,
+                self.cerebras_api_key,
+                self.gemini_api_key,
+                self.cohere_api_key,
+                self.openrouter_api_key,
+            ]):
                 print(
                     "WARNING: No AI backend configured. Set at least one provider API key.",
                     file=sys.stderr,

@@ -73,13 +73,15 @@ def test_credit_health_empty(client):
 def test_auto_categorize_endpoint(client):
     """POST /categorize should return correct categories for new rules."""
     payloads = [
-        {"description": "dimono upi transaction", "expected": "Dining"},
-        {"description": "dominos pizza order", "expected": "Dining"},
-        {"description": "zepto groceries order", "expected": "Groceries"},
-        {"description": "starbucks cafe coffee", "expected": "Dining"},
-        {"description": "chaloasc/yesb/chaloascdc/paym", "expected": "Transport"},
-        {"description": "croma au/yesb/paytm-7466", "expected": "Shopping"},
-        {"description": "coursera/airp/coursera34", "expected": "Subscriptions"},
+        {"description": "dimono upi transaction",        "expected": "Dining"},
+        {"description": "dominos pizza order",            "expected": "Dining"},
+        {"description": "zepto groceries order",          "expected": "Groceries"},
+        {"description": "starbucks cafe coffee",          "expected": "Dining"},
+        {"description": "chaloasc/yesb/chaloascdc/paym",  "expected": "Transport"},
+        {"description": "croma au/yesb/paytm-7466",       "expected": "Shopping"},
+        # coursera is correctly Education in the new 18-category taxonomy
+        {"description": "coursera/airp/coursera34",       "expected": "Education"},
+
     ]
     for p in payloads:
         r = client.post(

@@ -8,8 +8,11 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.auth import get_current_user
 from app.db import Base, get_db
 from app.main import app
+from app.models import User
+from app.schemas import UserContext
 
 # In-memory SQLite for tests
 TEST_ENGINE = create_engine(
@@ -18,6 +21,11 @@ TEST_ENGINE = create_engine(
     poolclass=StaticPool,
 )
 TestSession = sessionmaker(bind=TEST_ENGINE)
+
+# Stable test identity
+TEST_USER_ID = "test-user-1"
+TEST_USER    = UserContext(id=TEST_USER_ID, email="test@ledger.local")
+AUTH_HEADER  = {"Authorization": f"Bearer {TEST_USER_ID}"}
 
 
 def override_get_db():
@@ -28,15 +36,28 @@ def override_get_db():
         db.close()
 
 
-app.dependency_overrides[get_db] = override_get_db
+def override_get_current_user() -> UserContext:
+    """Bypass JWT verification — return a stable test user."""
+    return TEST_USER
 
-AUTH_HEADER = {"Authorization": "Bearer test-user-1"}
+
+# Register dependency overrides
+app.dependency_overrides[get_db]           = override_get_db
+app.dependency_overrides[get_current_user] = override_get_current_user
 
 
 @pytest.fixture(autouse=True)
 def setup_db():
-    """Create all tables before each test, drop after."""
+    """Create all tables before each test, drop after. Pre-seed the test user."""
     Base.metadata.create_all(bind=TEST_ENGINE)
+    # Pre-create the user row so FK constraints in every endpoint are satisfied
+    db = TestSession()
+    try:
+        if not db.get(User, TEST_USER_ID):
+            db.add(User(id=TEST_USER_ID, email="test@ledger.local"))
+            db.commit()
+    finally:
+        db.close()
     yield
     Base.metadata.drop_all(bind=TEST_ENGINE)
 

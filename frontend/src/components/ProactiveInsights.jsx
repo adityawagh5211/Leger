@@ -1,53 +1,163 @@
 import React from "react";
-import { apiFetch, money } from "../lib";
-import { AlertCircle, TrendingUp, Lightbulb, CheckCircle, Info } from "lucide-react";
+import { apiFetch } from "../lib";
+import { AlertCircle, Lightbulb, CheckCircle, Info, Zap, X, ChevronRight } from "lucide-react";
 
-const ICONS = {
-  warning: <AlertCircle size={15} />,
-  tip: <Lightbulb size={15} />,
-  positive: <CheckCircle size={15} />,
-  info: <Info size={15} />,
+const TYPE_CONFIG = {
+  warning:  { icon: <AlertCircle  size={14} />, color: "#ef4444", bg: "#fef2f2", border: "#fecaca", label: "Warning"  },
+  tip:      { icon: <Lightbulb    size={14} />, color: "#f59e0b", bg: "#fffbeb", border: "#fde68a", label: "Tip"      },
+  positive: { icon: <CheckCircle  size={14} />, color: "#10b981", bg: "#ecfdf5", border: "#a7f3d0", label: "Great"    },
+  info:     { icon: <Info         size={14} />, color: "#6366f1", bg: "#eef2ff", border: "#c7d2fe", label: "Info"     },
 };
 
-export default function ProactiveInsights() {
-  const [insights, setInsights] = React.useState([]);
-  const [loading, setLoading] = React.useState(true);
+const PRIORITY_LABEL = { 5: "Critical", 4: "Important", 3: "Notable", 2: "Informational", 1: "Minor" };
+
+export default function ProactiveInsights({ onNavigate }) {
+  const [insights,   setInsights]   = React.useState([]);
+  const [loading,    setLoading]    = React.useState(true);
+  const [dismissed,  setDismissed]  = React.useState(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem("dismissed_insights") || "{}");
+      const now    = Date.now();
+      // Clean up expired dismissals (7 days)
+      const valid = Object.fromEntries(
+        Object.entries(stored).filter(([, ts]) => now - ts < 7 * 24 * 3600 * 1000)
+      );
+      return valid;
+    } catch { return {}; }
+  });
 
   React.useEffect(() => {
     apiFetch("/insights/proactive")
-      .then(setInsights)
+      .then((data) => {
+        // Sort by priority descending
+        const sorted = [...(data || [])].sort((a, b) => (b.priority || 0) - (a.priority || 0));
+        setInsights(sorted);
+      })
       .catch(() => setInsights([]))
       .finally(() => setLoading(false));
   }, []);
 
+  const dismiss = (key) => {
+    const next = { ...dismissed, [key]: Date.now() };
+    setDismissed(next);
+    localStorage.setItem("dismissed_insights", JSON.stringify(next));
+  };
+
+  const visible = insights.filter((ins, i) => !dismissed[`${ins.text}_${i}`]);
+
   if (loading) {
     return (
       <div className="proactive-card card">
-        <div className="proactive-title">AI Insights</div>
-        <div className="proactive-loading">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="skeleton" style={{ height: 42, borderRadius: 8 }} />
+        <div className="proactive-title" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+          <Zap size={16} style={{ color: "#6366f1" }} />
+          <span>AI Insights</span>
+          <div className="skeleton" style={{ width: 40, height: 20, borderRadius: 10, marginLeft: "auto" }} />
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="skeleton" style={{ height: 52, borderRadius: 12 }} />
           ))}
         </div>
       </div>
     );
   }
 
-  if (!insights.length) return null;
+  if (!visible.length) return null;
 
   return (
     <div className="proactive-card card">
-      <div className="proactive-title">
-        <Lightbulb size={16} className="icon-accent" /> AI Insights
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+        <Zap size={16} style={{ color: "#6366f1" }} />
+        <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)" }}>AI Insights</span>
+        <span style={{
+          marginLeft: "auto", fontSize: 11, padding: "2px 10px", borderRadius: 20,
+          background: "var(--surface-secondary)", color: "var(--text-muted)", fontWeight: 600,
+        }}>
+          {visible.length} insights
+        </span>
       </div>
-      <div className="proactive-list">
-        {insights.map((insight, i) => (
-          <div key={i} className={`proactive-item proactive-${insight.type}`}>
-            <div className="proactive-icon">{ICONS[insight.type] || ICONS.info}</div>
-            <p>{insight.text}</p>
-          </div>
-        ))}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {visible.map((ins, i) => {
+          const cfg = TYPE_CONFIG[ins.type] || TYPE_CONFIG.info;
+          const key = `${ins.text}_${i}`;
+          return (
+            <div key={key}
+              style={{
+                display: "flex", alignItems: "flex-start", gap: 10,
+                padding: "12px 14px",
+                background: cfg.bg,
+                border: `1px solid ${cfg.border}`,
+                borderLeft: `4px solid ${cfg.color}`,
+                borderRadius: 12,
+                position: "relative",
+                transition: "transform 0.15s, box-shadow 0.15s",
+              }}
+              onMouseEnter={e => e.currentTarget.style.transform = "translateY(-1px)"}
+              onMouseLeave={e => e.currentTarget.style.transform = ""}
+            >
+              {/* Priority badge */}
+              {ins.priority >= 4 && (
+                <div style={{
+                  position: "absolute", top: -6, right: 36, fontSize: 9, fontWeight: 800,
+                  padding: "1px 6px", borderRadius: 6, textTransform: "uppercase",
+                  background: ins.priority === 5 ? "#ef4444" : "#f59e0b", color: "#fff",
+                }}>
+                  {PRIORITY_LABEL[ins.priority]}
+                </div>
+              )}
+
+              <div style={{ color: cfg.color, marginTop: 1, flexShrink: 0 }}>
+                {cfg.icon}
+              </div>
+
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: 13, lineHeight: 1.55, margin: 0, color: "var(--text-primary)", fontWeight: 500 }}>
+                  {ins.text}
+                </p>
+                {ins.category && (
+                  <button
+                    onClick={() => onNavigate?.(`/transactions?category=${ins.category}`)}
+                    style={{
+                      marginTop: 6, fontSize: 11, color: cfg.color, background: "none",
+                      border: "none", padding: 0, cursor: "pointer", display: "flex",
+                      alignItems: "center", gap: 3, fontWeight: 600,
+                    }}
+                  >
+                    View {ins.category} <ChevronRight size={10} />
+                  </button>
+                )}
+              </div>
+
+              {/* Type label */}
+              <span style={{
+                fontSize: 10, padding: "2px 7px", borderRadius: 8, fontWeight: 700,
+                color: cfg.color, background: "transparent",
+                border: `1px solid ${cfg.border}`, textTransform: "uppercase",
+                flexShrink: 0, alignSelf: "flex-start",
+              }}>
+                {cfg.label}
+              </span>
+
+              {/* Dismiss button */}
+              <button onClick={() => dismiss(key)}
+                style={{
+                  background: "none", border: "none", color: "var(--text-muted)",
+                  cursor: "pointer", padding: "0 2px", flexShrink: 0, fontSize: 14,
+                  lineHeight: 1, marginTop: -2,
+                }}>
+                <X size={13} />
+              </button>
+            </div>
+          );
+        })}
       </div>
+
+      {insights.length > visible.length && (
+        <div style={{ marginTop: 10, fontSize: 12, color: "var(--text-muted)", textAlign: "center" }}>
+          {insights.length - visible.length} insight(s) dismissed · Resets in 7 days
+        </div>
+      )}
     </div>
   );
 }

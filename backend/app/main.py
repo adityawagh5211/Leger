@@ -4,12 +4,14 @@ import hashlib
 import json
 import logging
 import sys
+import time
 from datetime import date
 from decimal import Decimal
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
+from pydantic import BaseModel
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -61,12 +63,15 @@ from .schemas import (
     WebhookOut,
 )
 from .services.ai_router import ai_router
+from .services.anomaly_detector import detect_anomalies
 from .services.audit import get_audit_trail, log_event
 from .services.auto_categorizer import categorize_batch, categorize_single
 from .services.benchmarks import generate_benchmarks
 from .services.bill_negotiator import analyze_bills
+from .services.categorization_learner import get_user_overrides, record_correction
 from .services.credit_health import compute_credit_health
 from .services.export import export_csv, export_json, export_tally_xml
+from .services.forecaster import budget_breach_warnings, generate_forecast
 from .services.gst import generate_gst_report
 from .services.insights import (
     SYSTEM_PROMPT,
@@ -76,6 +81,7 @@ from .services.insights import (
     monthly_summary,
     recurring_payments,
 )
+from .services.portfolio_analytics import compute_portfolio_analytics
 from .services.proactive_insights import generate_proactive_insights
 from .services.prompt_guard import build_safe_messages, sanitize_user_input
 from .services.receipt_ocr import parse_receipt_image
@@ -83,27 +89,57 @@ from .services.sms_parser import parse_sms
 from .services.statements import parse_csv, parse_excel, parse_pdf
 
 
-class SimpleLRUCache:
-    def __init__(self, maxsize=256):
-        self.cache = {}
-        self.maxsize = maxsize
+# ── Tiered TTL Cache (L1: in-memory with TTL) ─────────────────────────────────
+class TTLCache:
+    """LRU cache with per-entry TTL expiry and user-scoped keys."""
 
-    def get(self, key):
-        if key in self.cache:
-            val = self.cache.pop(key)
-            self.cache[key] = val
-            return val
-        return None
+    def __init__(self, maxsize: int = 512, default_ttl: int = 3600):
+        self._cache: dict[str, dict] = {}
+        self.maxsize    = maxsize
+        self.default_ttl = default_ttl
 
-    def put(self, key, value):
-        if key in self.cache:
-            self.cache.pop(key)
-        self.cache[key] = value
-        if len(self.cache) > self.maxsize:
-            self.cache.pop(next(iter(self.cache)))
+    def _evict_expired(self):
+        now = time.time()
+        expired = [k for k, v in self._cache.items() if v["expires"] < now]
+        for k in expired:
+            del self._cache[k]
+
+    def get(self, key: str):
+        entry = self._cache.get(key)
+        if not entry:
+            return None
+        if entry["expires"] < time.time():
+            del self._cache[key]
+            return None
+        # Move to end (LRU)
+        val = self._cache.pop(key)
+        self._cache[key] = val
+        return val["data"]
+
+    def put(self, key: str, value, ttl: int | None = None):
+        self._evict_expired()
+        if key in self._cache:
+            self._cache.pop(key)
+        self._cache[key] = {
+            "data":    value,
+            "expires": time.time() + (ttl or self.default_ttl),
+        }
+        if len(self._cache) > self.maxsize:
+            self._cache.pop(next(iter(self._cache)))
+
+    def invalidate_user(self, user_id: str):
+        """Invalidate all cache entries for a specific user."""
+        keys = [k for k in self._cache if k.startswith(f"{user_id}:")]
+        for k in keys:
+            del self._cache[k]
 
 
-llm_cache = SimpleLRUCache(256)
+llm_cache = TTLCache(maxsize=512, default_ttl=settings.llm_cache_ttl_seconds)
+
+
+# ── New request schemas ───────────────────────────────────────────────────────
+class CategoryCorrectionRequest(BaseModel):
+    category: str
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -715,7 +751,11 @@ async def advisor_stream(
             headers={"Cache-Control": "no-cache"},
         )
 
-    context = build_advisor_context(transactions, budgets)
+    # Enrich advisor context with anomalies + forecast
+    anomalies = detect_anomalies(transactions)
+    forecast  = generate_forecast(transactions)
+    context   = build_advisor_context(transactions, budgets, anomalies=anomalies, forecast=forecast)
+
 
     # Load conversation history if continuing a thread
     history = []
@@ -945,51 +985,9 @@ async def auto_categorize_batch(
     return results
 
 
-@app.post("/categorize/recategorize")
-async def recategorize_uncategorized(
-    user: UserContext = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """Re-categorize all 'Other' transactions using LLM."""
-    txs = (
-        db.query(Transaction)
-        .filter(
-            Transaction.user_id == user.id,
-            Transaction.category == "Other",
-        )
-        .limit(50)
-        .all()
-    )
-
-    if not txs:
-        return {"updated": 0}
-
-    batch = [{"id": tx.id, "description": tx.description, "type": tx.type} for tx in txs]
-    results = await categorize_batch(batch)
-
-    updated = 0
-    for result in results:
-        if result["category"] != "Other" and result.get("confidence", 0) >= 0.6:
-            tx = db.get(Transaction, result["id"])
-            if tx:
-                tx.category = result["category"]
-                tx.confidence = result.get("confidence")
-                tx.merchant_normalized = result.get("merchant")
-                updated += 1
-    db.commit()
-    logger.info("recategorize user=%s updated=%d of %d", user.id, updated, len(txs))
-    return {"updated": updated, "total_checked": len(txs)}
-
 
 # ── Proactive Insights ───────────────────────────────────────────────────────
-@app.get("/insights/proactive", response_model=list[ProactiveInsight])
-async def proactive_insights(
-    user: UserContext = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    transactions = _tx_query(db, user.id).limit(300).all()
-    budgets = db.query(Budget).filter(Budget.user_id == user.id).all()
-    return await generate_proactive_insights(transactions, budgets)
+# Proactive insights moved to end of file (v2 with anomaly + forecast context)
 
 
 # ── Receipt OCR ───────────────────────────────────────────────────────────────
@@ -1315,3 +1313,173 @@ def community_benchmarks(
 ):
     transactions = _tx_query(db, user.id).limit(500).all()
     return generate_benchmarks(transactions)
+
+
+# ── Anomaly Detection ─────────────────────────────────────────────────────────
+@app.get("/analytics/anomalies")
+def get_anomalies(
+    range: str | None = Query("3m", pattern="^(this_month|3m|1y|all)$"),
+    user: UserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Detect anomalous transactions using IQR + velocity spike analysis."""
+    cache_key = f"{user.id}:anomalies:{range}"
+    cached = llm_cache.get(cache_key)
+    if cached:
+        return cached
+
+    start = _history_start(range)
+    q = db.query(Transaction).filter(Transaction.user_id == user.id)
+    if start:
+        q = q.filter(Transaction.date >= start)
+    transactions = q.order_by(Transaction.date.desc()).all()
+
+    anomalies = detect_anomalies(transactions)
+    llm_cache.put(cache_key, anomalies, ttl=1800)  # 30-min cache
+    return anomalies
+
+
+# ── Spending Forecast ─────────────────────────────────────────────────────────
+@app.get("/analytics/forecast")
+def get_forecast(
+    user: UserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Project 30/60/90-day spending per category using EWMA."""
+    cache_key = f"{user.id}:forecast"
+    cached = llm_cache.get(cache_key)
+    if cached:
+        return cached
+
+    transactions = _tx_query(db, user.id).limit(1000).all()
+    budgets      = db.query(Budget).filter(Budget.user_id == user.id).all()
+    forecast     = generate_forecast(transactions)
+    warnings     = budget_breach_warnings(transactions, budgets)
+    result       = {**forecast, "budget_warnings": warnings}
+
+    llm_cache.put(cache_key, result, ttl=3600)
+    return result
+
+
+# ── Portfolio Analytics ───────────────────────────────────────────────────────
+@app.get("/portfolios/analytics")
+def portfolio_analytics(
+    user: UserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Compute Sharpe ratio, XIRR, asset allocation, drawdown for all portfolios."""
+    portfolios = db.query(Portfolio).filter(Portfolio.user_id == user.id).all()
+    if not portfolios:
+        return {"allocation": [], "total_return_pct": 0, "sharpe_ratio": None}
+
+    holdings_by_portfolio = {p.id: p.holdings for p in portfolios}
+    return compute_portfolio_analytics(portfolios, holdings_by_portfolio)
+
+
+# ── Proactive Insights (upgraded — with anomaly + forecast context) ────────────
+@app.get("/insights/proactive", response_model=list[ProactiveInsight])
+async def proactive_insights_v2(
+    user: UserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """AI-powered proactive insights with anomaly and forecast injection."""
+    # Check cache first (insight_cache_ttl_hours)
+    cache_key = f"{user.id}:proactive"
+    cached = llm_cache.get(cache_key)
+    if cached:
+        return cached
+
+    transactions = _tx_query(db, user.id).limit(300).all()
+    budgets      = db.query(Budget).filter(Budget.user_id == user.id).all()
+
+    # Enrich with anomalies and forecast
+    anomalies = detect_anomalies(transactions)
+    forecast  = generate_forecast(transactions)
+
+    result = await generate_proactive_insights(transactions, budgets, anomalies, forecast)
+    llm_cache.put(cache_key, result, ttl=settings.insight_cache_ttl_hours * 3600)
+    return result
+
+
+# ── Category Correction (user feedback for learning) ─────────────────────────
+@app.post("/transactions/{transaction_id}/correct-category")
+def correct_transaction_category(
+    transaction_id: str,
+    payload: CategoryCorrectionRequest,
+    user: UserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """User manually corrects a transaction's category — trains the learning system."""
+    tx = db.get(Transaction, transaction_id)
+    if not tx or tx.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    old_category = tx.category
+    tx.category  = payload.category
+    tx.confidence = 1.0  # User correction = full confidence
+    db.commit()
+
+    # Record correction for learning pipeline
+    record_correction(db, user.id, tx.description, payload.category)
+
+    # Invalidate relevant caches for this user
+    llm_cache.invalidate_user(user.id)
+
+    logger.info(
+        "category.corrected user=%s tx=%s %s→%s",
+        user.id, transaction_id, old_category, payload.category,
+    )
+    return {"corrected": True, "old_category": old_category, "new_category": payload.category}
+
+
+# ── Embedding Cache Stats (debug/monitoring) ──────────────────────────────────
+@app.get("/debug/embedding-cache")
+def embedding_cache_stats(
+    user: UserContext = Depends(get_current_user),
+):
+    """Return embedding cache statistics for monitoring."""
+    from .services.embedding_cache import embedding_cache
+    return embedding_cache.get_stats()
+
+
+# ── Mass Recategorize (new categories support) ────────────────────────────────
+@app.post("/categorize/recategorize")
+async def recategorize_uncategorized(
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+    user: UserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Re-categorize 'Other' transactions using the 4-tier AI pipeline."""
+    txs = (
+        db.query(Transaction)
+        .filter(
+            Transaction.user_id == user.id,
+            Transaction.category == "Other",
+        )
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+    if not txs:
+        return {"updated": 0, "offset": offset}
+
+    # Load user overrides for personalized categorization
+    user_overrides = get_user_overrides(db, user.id)
+    batch = [{"id": tx.id, "description": tx.description, "type": tx.type} for tx in txs]
+    results = await categorize_batch(batch, user_overrides=user_overrides)
+
+    updated = 0
+    for result in results:
+        if result["category"] != "Other" and result.get("confidence", 0) >= 0.6:
+            tx = db.get(Transaction, result["id"])
+            if tx:
+                tx.category           = result["category"]
+                tx.confidence         = result.get("confidence")
+                tx.merchant_normalized = result.get("merchant")
+                updated += 1
+    db.commit()
+    logger.info("recategorize user=%s updated=%d of %d offset=%d", user.id, updated, len(txs), offset)
+    return {"updated": updated, "total_checked": len(txs), "offset": offset, "has_more": len(txs) == limit}
+
