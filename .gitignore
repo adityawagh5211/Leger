@@ -42,3 +42,9 @@ desktop.ini
 htmlcov/
 .coverage
 coverage.xml
+
+# User local test bank statements
+bank1.csv
+bank2.csv
+bank3.csv
+transactions.csv

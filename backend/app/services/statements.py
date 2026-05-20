@@ -82,13 +82,13 @@ def _parse_date_value(value) -> date | None:
 def _normalize_frame(df: pd.DataFrame) -> list[dict]:
     df = df.dropna(how="all")
     normalized = {str(c).strip().lower().replace("\ufeff", ""): c for c in df.columns}
-    date_col = next((normalized[c] for c in normalized if "date" in c), None)
+    date_col = next((normalized[c] for c in normalized if "date" in c or "timestamp" in c or "time" in c), None)
     desc_col = next(
         (
             normalized[c]
             for c in normalized
-            if c in {"description", "details", "narration", "particulars"}
-            or any(token in c for token in ("description", "detail", "narration", "particular", "remarks"))
+            if c in {"description", "details", "narration", "particulars", "receiver name", "recipient", "merchant", "vendor"}
+            or any(token in c for token in ("description", "detail", "narration", "particular", "remarks", "receiver", "recipient", "merchant", "vendor"))
         ),
         None,
     )
@@ -393,7 +393,14 @@ async def _mistral_ocr_pdf(content: bytes) -> str:
 
 
 def parse_csv(content: bytes) -> list[dict]:
-    text = content.decode("utf-8-sig")
+    # Robust check: if content starts with PK ZIP magic bytes, it's actually an Excel workbook (.xlsx)
+    if content.startswith(b"PK\x03\x04"):
+        logger.info("parse_csv: Detected Excel magic signature. Redirecting to parse_excel.")
+        return parse_excel(content)
+    try:
+        text = content.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = content.decode("latin-1")
     df = pd.read_csv(StringIO(text), dtype=str, keep_default_na=False)
     return _normalize_frame(df)
 
