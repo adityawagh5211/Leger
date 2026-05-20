@@ -231,40 +231,85 @@ export default function Investments() {
               <div style={{ fontWeight: 600 }}>No holdings yet</div>
             </div>
           ) : (
-            <div style={{ overflowX: 'auto', marginBottom: holdingForm ? 24 : 0 }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-                <thead>
-                  <tr style={{ background: 'var(--bg)', borderRadius: 8 }}>
-                    {['Symbol', 'Name', 'Qty', 'Buy Price', 'Current', 'P&L', ''].map(h => (
-                      <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {holdings.map(h => {
-                    const pnl    = (Number(h.current_price) - Number(h.buy_price)) * Number(h.quantity);
-                    const pnlPct = Number(h.buy_price) > 0 ? ((Number(h.current_price) - Number(h.buy_price)) / Number(h.buy_price) * 100).toFixed(1) : 0;
-                    return (
-                      <tr key={h.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                        <td style={{ padding: '14px 16px', fontWeight: 700 }}>{h.symbol}</td>
-                        <td style={{ padding: '14px 16px', color: 'var(--text-secondary)' }}>{h.name}</td>
-                        <td style={{ padding: '14px 16px' }}>{Number(h.quantity)}</td>
-                        <td style={{ padding: '14px 16px' }}>{money(h.buy_price)}</td>
-                        <td style={{ padding: '14px 16px', fontWeight: 600 }}>{money(h.current_price)}</td>
-                        <td style={{ padding: '14px 16px', color: pnlColor(pnl), fontWeight: 700 }}>
-                          <span style={{ background: pnl >= 0 ? '#ecfdf5' : '#fff1f2', padding: '4px 10px', borderRadius: 8 }}>
+            <>
+              {/* Desktop Table Layout */}
+              <div className="holdings-table" style={{ overflowX: 'auto', marginBottom: holdingForm ? 24 : 0 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+                  <thead>
+                    <tr style={{ background: 'var(--bg)', borderRadius: 8 }}>
+                      {['Symbol', 'Name', 'Qty', 'Buy Price', 'Current', 'P&L', ''].map(h => (
+                        <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {holdings.map(h => {
+                      const pnl    = (Number(h.current_price) - Number(h.buy_price)) * Number(h.quantity);
+                      const pnlPct = Number(h.buy_price) > 0 ? ((Number(h.current_price) - Number(h.buy_price)) / Number(h.buy_price) * 100).toFixed(1) : 0;
+                      return (
+                        <tr key={h.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                          <td style={{ padding: '14px 16px', fontWeight: 700 }}>{h.symbol}</td>
+                          <td style={{ padding: '14px 16px', color: 'var(--text-secondary)' }}>{h.name}</td>
+                          <td style={{ padding: '14px 16px' }}>{Number(h.quantity)}</td>
+                          <td style={{ padding: '14px 16px' }}>{money(h.buy_price)}</td>
+                          <td style={{ padding: '14px 16px', fontWeight: 600 }}>{money(h.current_price)}</td>
+                          <td style={{ padding: '14px 16px', color: pnlColor(pnl), fontWeight: 700 }}>
+                            <span style={{ background: pnl >= 0 ? '#ecfdf5' : '#fff1f2', padding: '4px 10px', borderRadius: 8 }}>
+                              {pnl >= 0 ? "+" : ""}{money(pnl)} ({pnlPct}%)
+                            </span>
+                          </td>
+                          <td style={{ padding: '14px 16px' }}>
+                            <button className="tx-delete-btn" onClick={() => deleteHolding(h.id)}><Trash2 size={13} /></button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Card Layout */}
+              <div className="holdings-mobile-list" style={{ marginBottom: holdingForm ? 24 : 0 }}>
+                {holdings.map(h => {
+                  const pnl    = (Number(h.current_price) - Number(h.buy_price)) * Number(h.quantity);
+                  const pnlPct = Number(h.buy_price) > 0 ? ((Number(h.current_price) - Number(h.buy_price)) / Number(h.buy_price) * 100).toFixed(1) : 0;
+                  return (
+                    <div className="holding-mobile-card" key={h.id}>
+                      <div className="holding-mobile-row-1">
+                        <div>
+                          <div className="holding-mobile-symbol">{h.symbol}</div>
+                          <div className="holding-mobile-name">{h.name}</div>
+                        </div>
+                        <button className="tx-delete-btn" onClick={() => deleteHolding(h.id)} aria-label={`Delete ${h.symbol}`}>
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                      
+                      <div className="holding-mobile-grid">
+                        <div>
+                          <div className="holding-mobile-label">Quantity</div>
+                          <div className="holding-mobile-value">{Number(h.quantity)}</div>
+                        </div>
+                        <div>
+                          <div className="holding-mobile-label">Buy Price</div>
+                          <div className="holding-mobile-value">{money(h.buy_price)}</div>
+                        </div>
+                        <div>
+                          <div className="holding-mobile-label">Current</div>
+                          <div className="holding-mobile-value">{money(h.current_price)}</div>
+                        </div>
+                        <div className="holding-mobile-pnl" style={{ color: pnlColor(pnl) }}>
+                          <div className="holding-mobile-label">Total P&L</div>
+                          <span style={{ background: pnl >= 0 ? '#ecfdf5' : '#fff1f2', padding: '4px 10px', borderRadius: 8, fontSize: 13, fontWeight: 700 }}>
                             {pnl >= 0 ? "+" : ""}{money(pnl)} ({pnlPct}%)
                           </span>
-                        </td>
-                        <td style={{ padding: '14px 16px' }}>
-                          <button className="tx-delete-btn" onClick={() => deleteHolding(h.id)}><Trash2 size={13} /></button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           )}
 
           {holdingForm && (

@@ -20,6 +20,7 @@ export default function Advisor() {
   const [input, setInput]                 = React.useState("");
   const [streaming, setStreaming]         = React.useState(false);
   const [loadingConvs, setLoadingConvs]   = React.useState(true);
+  const [showConvs, setShowConvs]         = React.useState(false);
   const chatRef  = React.useRef(null);
   const inputRef = React.useRef(null);
 
@@ -36,6 +37,7 @@ export default function Advisor() {
 
   async function openConversation(id) {
     setActiveId(id);
+    setShowConvs(false);
     try {
       const msgs = await apiFetch(`/conversations/${id}/messages`);
       setMessages(msgs.map((m) => ({ role: m.role, text: m.content })));
@@ -117,6 +119,7 @@ export default function Advisor() {
   function newConversation() {
     setActiveId(null);
     setMessages([]);
+    setShowConvs(false);
   }
 
   async function deleteConversation(id, e) {
@@ -147,7 +150,7 @@ export default function Advisor() {
     <div className="view-advisor">
       <div className="advisor-layout">
         {/* Sidebar */}
-        <aside className="advisor-sidebar">
+        <aside className={`advisor-sidebar${showConvs ? " open" : ""}`}>
           <div className="advisor-sidebar-header">
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <MessageSquare size={16} style={{ color: 'var(--accent)' }} />
@@ -202,12 +205,22 @@ export default function Advisor() {
         {/* Main chat */}
         <div className="advisor-main">
           <div style={{ marginBottom: 24 }}>
-            <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
-              <div style={{ width: 40, height: 40, borderRadius: 12, background: 'linear-gradient(135deg, var(--accent), #c084fc)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Sparkles size={20} style={{ color: 'white' }} />
-              </div>
-              Amadeus AI
-            </h1>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
+              <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
+                <div style={{ width: 40, height: 40, borderRadius: 12, background: 'linear-gradient(135deg, var(--accent), #c084fc)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Sparkles size={20} style={{ color: 'white' }} />
+                </div>
+                Amadeus AI
+              </h1>
+              <button
+                className="mobile-only-inline btn-link"
+                onClick={() => setShowConvs(!showConvs)}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 12 }}
+              >
+                <MessageSquare size={15} />
+                <span>History</span>
+              </button>
+            </div>
             <p className="page-subtitle" style={{ marginBottom: 0 }}>Your personal financial advisor, powered by AI</p>
           </div>
 

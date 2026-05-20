@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { supabase } from "./supabase";
 import { apiFetch, EXPENSE_CATEGORIES, setAuthToken, today } from "./lib";
-import { useToast } from "./components/ui";
+import { useToast, LegerLogo } from "./components/ui";
 import Auth from "./views/Auth";
 import Dashboard from "./views/Dashboard";
 import Transactions from "./views/Transactions";
@@ -125,15 +125,17 @@ export default function App() {
     if (next && next.id !== view) setView(next.id);
   }
 
-  function onPointerDown(e) {
-    if (e.pointerType === "mouse" || sheetOpen || moreDrawerOpen) return;
-    touchStart.current = { x: e.clientX, y: e.clientY };
+  function handleTouchStart(e) {
+    if (sheetOpen || moreDrawerOpen) return;
+    const touch = e.touches[0];
+    touchStart.current = { x: touch.clientX, y: touch.clientY };
   }
 
-  function onPointerUp(e) {
-    if (!touchStart.current || e.pointerType === "mouse") return;
-    const dx = e.clientX - touchStart.current.x;
-    const dy = e.clientY - touchStart.current.y;
+  function handleTouchEnd(e) {
+    if (!touchStart.current) return;
+    const touch = e.changedTouches[0];
+    const dx = touch.clientX - touchStart.current.x;
+    const dy = touch.clientY - touchStart.current.y;
     touchStart.current = null;
     if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.4) {
       navigateBy(dx < 0 ? 1 : -1);
@@ -165,12 +167,7 @@ export default function App() {
       <header className="app-header">
         <div className="app-header-inner">
           <div className="logo">
-            <div className="logo-icon">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 3L20 7.5V16.5L12 21L4 16.5V7.5L12 3Z" fill="rgba(255,255,255,0.2)" stroke="white"/>
-                <circle cx="12" cy="12" r="3" fill="white" stroke="none"/>
-              </svg>
-            </div>
+            <LegerLogo size={38} />
             <div>
               <div className="logo-name">Ledger</div>
               <div className="logo-sub">AI Finance Platform</div>
@@ -242,8 +239,8 @@ export default function App() {
       
       <main
         className="page-content swipe-shell"
-        onPointerDown={onPointerDown}
-        onPointerUp={onPointerUp}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
       >
         <div key={view} className="swipe-view">{renderView()}</div>
       </main>
@@ -281,8 +278,8 @@ export default function App() {
       </nav>
 
       {/* Mobile More Drawer */}
-      <div className={`sheet-backdrop${moreDrawerOpen ? " open" : ""}`} onClick={() => setMoreDrawerOpen(false)} style={{ zIndex: 950 }} />
-      <div className={`bottom-sheet${moreDrawerOpen ? " open" : ""}`} style={{ zIndex: 951 }}>
+      <div className={`sheet-backdrop${moreDrawerOpen ? " open" : ""}`} onClick={() => setMoreDrawerOpen(false)} />
+      <div className={`bottom-sheet${moreDrawerOpen ? " open" : ""}`}>
         <div className="sheet-handle" />
         <div className="sheet-header">
           <div className="form-section-title" style={{ marginBottom: 0 }}>All Features</div>

@@ -98,7 +98,7 @@ export default function Budgets() {
       </div>
 
       {/* Summary row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 28 }}>
+      <div className="budget-summary-row">
         {[
           { label: 'Total Budgeted', val: money(totalBudgeted), color: 'var(--accent)' },
           { label: 'Total Spent',    val: money(totalSpent),    color: totalSpent > totalBudgeted ? 'var(--negative)' : 'var(--positive)' },

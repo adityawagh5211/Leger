@@ -140,19 +140,12 @@ export default function Transactions() {
 
       {/* Tabbed add/import card */}
       <div className="card" style={{ marginBottom: 24 }}>
-        <div style={{ display: 'flex', gap: 4, marginBottom: 28, background: 'var(--bg)', padding: 4, borderRadius: 12 }}>
+        <div className="import-tab-bar">
           {TABS.map(({ id, label, Icon }) => (
             <button
               key={id}
               onClick={() => setActiveTab(id)}
-              style={{
-                flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                padding: '10px 16px', borderRadius: 10, border: 'none', cursor: 'pointer',
-                fontSize: 14, fontWeight: 600, transition: 'all 0.2s',
-                background: activeTab === id ? 'var(--surface)' : 'transparent',
-                color: activeTab === id ? 'var(--accent)' : 'var(--text-secondary)',
-                boxShadow: activeTab === id ? 'var(--shadow)' : 'none',
-              }}
+              className={`import-tab-btn${activeTab === id ? " active" : ""}`}
             >
               <Icon size={15} /> {label}
             </button>
@@ -259,9 +252,9 @@ export default function Transactions() {
 
       {/* Transaction list */}
       <div className="card">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+        <div className="tx-list-header">
           <div className="chart-title">Recent Transactions</div>
-          <div style={{ display: 'flex', gap: 10, flex: 1, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+          <div className="tx-filters">
             <div className="search-wrap" style={{ maxWidth: 280 }}>
               <Search size={15} className="search-icon" />
               <input className="search-input" placeholder="Search…"
@@ -304,12 +297,12 @@ export default function Transactions() {
 
         {!loading && transactions.map((tx) => (
           <div className="tx-item" key={tx.id}>
-            <span style={{ color: 'var(--text-secondary)', fontSize: 13, fontWeight: 500 }}>{tx.date}</span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span className="tx-date" style={{ color: 'var(--text-secondary)', fontSize: 13, fontWeight: 500 }}>{tx.date}</span>
+            <span className="tx-cat-wrap" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: CATEGORY_COLORS[tx.category] || '#94a3b8', flexShrink: 0 }} />
               <span style={{ color: 'var(--text-secondary)', fontSize: 13, fontWeight: 500 }}>{tx.category}</span>
             </span>
-            <span style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.description}</span>
+            <span className="tx-desc" style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.description}</span>
             <span className={tx.type === "income" ? "tx-amount-income" : "tx-amount-expense"}>
               {tx.type === "income" ? "+" : "−"}{money(tx.amount)}
             </span>

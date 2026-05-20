@@ -124,3 +124,39 @@ export function ErrorMsg({ message }) {
     </div>
   );
 }
+
+export function LegerLogo({ size = 38, className = "" }) {
+  return (
+    <div 
+      className={`logo-icon ${className}`} 
+      style={{ 
+        width: size, 
+        height: size, 
+        background: 'linear-gradient(135deg, var(--accent), #c084fc)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: '10px',
+        boxShadow: '0 4px 12px rgba(79, 70, 229, 0.3)'
+      }}
+    >
+      <svg 
+        width={size * 0.55} 
+        height={size * 0.55} 
+        viewBox="0 0 24 24" 
+        fill="none" 
+        stroke="white" 
+        strokeWidth="2.5" 
+        strokeLinecap="round" 
+        strokeLinejoin="round"
+      >
+        {/* The 'L' representing the Ledger */}
+        <path d="M6 4v14a2 2 0 0 0 2 2h12" />
+        {/* The upward growth node */}
+        <path d="M12 14l4-4 4 4" />
+        <path d="M16 10V4" />
+      </svg>
+    </div>
+  );
+}
+
