@@ -2,21 +2,42 @@
 Embedding Cache — local semantic similarity cache for transaction categorization.
 Uses sentence-transformers (all-MiniLM-L6-v2) for zero-cost embeddings.
 Provides cosine similarity search over cached transaction descriptions.
+
+Deployment notes
+────────────────
+The model (~90 MB) is downloaded from HuggingFace on first use and cached at
+the path set by the TRANSFORMERS_CACHE / HF_HOME environment variables.
+
+To disable on memory-constrained servers set:
+    ENABLE_LOCAL_EMBEDDINGS=false
+The pipeline then skips the embedding tier and falls through to the LLM tier.
 """
 
 import logging
+import os
 import threading
 from collections import OrderedDict
 from typing import Any
 
 import numpy as np
 
+from ..config import settings
+
 logger = logging.getLogger("ledger.embedding_cache")
+
+# Point HuggingFace to a stable, predictable cache directory so the model
+# survives container restarts when a persistent volume is mounted there.
+_HF_CACHE = os.environ.get("TRANSFORMERS_CACHE") or os.environ.get("HF_HOME")
+if not _HF_CACHE:
+    # Default: <repo-root>/backend/.hf_cache — easy to mount as a Docker volume
+    _HF_CACHE = os.path.join(os.path.dirname(__file__), "..", "..", ".hf_cache")
+    os.environ["HF_HOME"] = os.path.abspath(_HF_CACHE)
+    os.environ["TRANSFORMERS_CACHE"] = os.path.abspath(_HF_CACHE)
+
 
 # ── Constants ────────────────────────────────────────────────────────────────
 SIMILARITY_THRESHOLD = 0.80   # Minimum cosine similarity to accept a cached result
 EMBEDDING_CACHE_SIZE = 2048   # Max number of description embeddings to cache
-MODEL_NAME = "all-MiniLM-L6-v2"  # 80MB, fast, good for short text
 
 
 class EmbeddingCache:
@@ -26,22 +47,34 @@ class EmbeddingCache:
     """
 
     def __init__(self, maxsize: int = EMBEDDING_CACHE_SIZE):
-        self.maxsize = maxsize
+        self.maxsize        = maxsize
         self._cache: OrderedDict[str, dict] = OrderedDict()
-        self._model = None
-        self._model_loaded = False
-        self._model_lock = threading.Lock()
-        self._cache_lock = threading.Lock()
+        self._model         = None
+        self._model_loaded  = False
+        self._model_lock    = threading.Lock()
+        self._cache_lock    = threading.Lock()
+        # Respect ENABLE_LOCAL_EMBEDDINGS env flag — allows operators to disable
+        # the 90 MB model on memory-constrained servers without code changes.
+        self._enabled = settings.enable_local_embeddings
+        if not self._enabled:
+            logger.info(
+                "Local embeddings disabled via ENABLE_LOCAL_EMBEDDINGS=false. "
+                "Categorization will use rules + LLM only."
+            )
+            self._model_loaded = True  # skip _load_model() calls
 
     def _load_model(self):
         """Lazy-load the embedding model on first use."""
+        if not self._enabled:
+            return
         with self._model_lock:
             if self._model_loaded:
                 return
             try:
                 from sentence_transformers import SentenceTransformer
-                logger.info("Loading embedding model: %s", MODEL_NAME)
-                self._model = SentenceTransformer(MODEL_NAME)
+                model_name = settings.embedding_model or "all-MiniLM-L6-v2"
+                logger.info("Loading embedding model: %s (cache: %s)", model_name, os.environ.get("HF_HOME", "default"))
+                self._model = SentenceTransformer(model_name)
                 self._model_loaded = True
                 logger.info("Embedding model loaded successfully")
             except ImportError:
@@ -51,6 +84,9 @@ class EmbeddingCache:
                     "Embedding-based categorization will be skipped."
                 )
                 self._model_loaded = True  # Mark as loaded (with None model) to avoid retrying
+            except Exception as e:
+                logger.warning("Embedding model load failed: %s. Skipping embedding tier.", e)
+                self._model_loaded = True
 
     def is_available(self) -> bool:
         """Returns True if the embedding model is available."""

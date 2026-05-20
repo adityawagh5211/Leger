@@ -9,6 +9,9 @@ build/
 *.db
 *.sqlite3
 
+# HuggingFace model cache (baked into Docker at build time, not committed)
+.hf_cache/
+
 # Node
 node_modules/
 frontend/dist/
