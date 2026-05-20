@@ -5,10 +5,9 @@ Uses Google Gemini 1.5 Flash Vision capabilities to extract and structure data i
 
 import json
 import logging
+import re
 from datetime import date
 from decimal import Decimal
-import asyncio
-import re
 
 from ..config import settings
 from .categorizer import categorize
@@ -24,6 +23,7 @@ EXTRACTION_PROMPT = """Extract the following information from this receipt image
 
 Return ONLY valid JSON. No explanation."""
 
+
 async def parse_receipt_image(image_bytes: bytes) -> dict | None:
     """
     Parse a receipt image into structured transaction data.
@@ -34,28 +34,26 @@ async def parse_receipt_image(image_bytes: bytes) -> dict | None:
         return None
 
     logger.info("Sending receipt image to Gemini for extraction...")
-    
+
     try:
         import google.generativeai as genai
+
         genai.configure(api_key=settings.gemini_api_key)
-        
+
         model = genai.GenerativeModel("gemini-2.5-flash")
-        
-        image_part = {
-            "mime_type": "image/jpeg",
-            "data": image_bytes
-        }
-        
+
+        image_part = {"mime_type": "image/jpeg", "data": image_bytes}
+
         response = await model.generate_content_async([image_part, EXTRACTION_PROMPT])
         output_text = response.text
-        
+
         # Extract JSON block if surrounded by markdown codeblocks
-        json_match = re.search(r'\{.*\}', output_text.replace('\n', ' '), re.DOTALL)
+        json_match = re.search(r"\{.*\}", output_text.replace("\n", " "), re.DOTALL)
         if json_match:
             raw = json_match.group(0)
         else:
             raw = output_text
-            
+
         parsed_data = json.loads(raw)
 
         # Validate required fields
@@ -97,7 +95,7 @@ async def parse_receipt_image(image_bytes: bytes) -> dict | None:
             "merchant_normalized": merchant,
             "confidence": 0.8,
         }
-        
+
     except Exception as e:
         logger.warning("Gemini extraction failed or returned invalid JSON: %s", e)
         return None

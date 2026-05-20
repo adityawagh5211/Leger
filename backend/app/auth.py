@@ -1,3 +1,7 @@
+# ── Supabase Auth Verification ────────────────────────────────────────────────
+# Supabase now uses ES256/RS256 asymmetric signatures for new projects, verified via JWKS.
+from functools import lru_cache
+
 import httpx
 from fastapi import Depends, Header, HTTPException
 from sqlalchemy.orm import Session
@@ -7,9 +11,6 @@ from .db import get_db
 from .models import User
 from .schemas import UserContext
 
-# ── Supabase Auth Verification ────────────────────────────────────────────────
-# Supabase now uses ES256/RS256 asymmetric signatures for new projects, verified via JWKS.
-from functools import lru_cache
 
 @lru_cache(maxsize=1)
 def _get_supabase_jwks(url: str):
@@ -51,7 +52,7 @@ def _verify_token(token: str) -> UserContext:
 
             if not settings.supabase_jwks_url:
                 raise HTTPException(status_code=500, detail="SUPABASE_JWKS_URL not configured")
-            
+
             jwks = _get_supabase_jwks(settings.supabase_jwks_url)
 
             decoded = jwt.decode(

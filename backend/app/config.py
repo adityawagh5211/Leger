@@ -23,7 +23,6 @@ class Settings(BaseSettings):
     # Keep this so existing .env files don't break — but it won't be used
     anthropic_api_key: str | None = None
 
-
     # Redis
     redis_url: str = "redis://localhost:6379/0"
 
@@ -53,13 +52,15 @@ class Settings(BaseSettings):
                     file=sys.stderr,
                 )
                 sys.exit(1)
-            if not any([
-                self.groq_api_key, 
-                self.cerebras_api_key, 
-                self.gemini_api_key, 
-                self.cohere_api_key,
-                self.openrouter_api_key
-            ]):
+            if not any(
+                [
+                    self.groq_api_key,
+                    self.cerebras_api_key,
+                    self.gemini_api_key,
+                    self.cohere_api_key,
+                    self.openrouter_api_key,
+                ]
+            ):
                 print(
                     "WARNING: No AI backend configured. Set at least one provider API key.",
                     file=sys.stderr,

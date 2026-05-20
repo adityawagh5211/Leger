@@ -1,32 +1,11 @@
-import json
 import asyncio
 import base64
 import hashlib
+import json
 import logging
 import sys
 from datetime import date
 from decimal import Decimal
-
-class SimpleLRUCache:
-    def __init__(self, maxsize=256):
-        self.cache = {}
-        self.maxsize = maxsize
-        
-    def get(self, key):
-        if key in self.cache:
-            val = self.cache.pop(key)
-            self.cache[key] = val
-            return val
-        return None
-        
-    def put(self, key, value):
-        if key in self.cache:
-            self.cache.pop(key)
-        self.cache[key] = value
-        if len(self.cache) > self.maxsize:
-            self.cache.pop(next(iter(self.cache)))
-
-llm_cache = SimpleLRUCache(256)
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -72,8 +51,8 @@ from .schemas import (
     PortfolioIn,
     PortfolioOut,
     ProactiveInsight,
-    SmsWebhookRequest,
     SmsParseRequest,
+    SmsWebhookRequest,
     TransactionIn,
     TransactionOut,
     UserContext,
@@ -101,6 +80,29 @@ from .services.prompt_guard import build_safe_messages, sanitize_user_input
 from .services.receipt_ocr import parse_receipt_image
 from .services.sms_parser import parse_sms
 from .services.statements import parse_csv, parse_excel, parse_pdf
+
+
+class SimpleLRUCache:
+    def __init__(self, maxsize=256):
+        self.cache = {}
+        self.maxsize = maxsize
+
+    def get(self, key):
+        if key in self.cache:
+            val = self.cache.pop(key)
+            self.cache[key] = val
+            return val
+        return None
+
+    def put(self, key, value):
+        if key in self.cache:
+            self.cache.pop(key)
+        self.cache[key] = value
+        if len(self.cache) > self.maxsize:
+            self.cache.pop(next(iter(self.cache)))
+
+
+llm_cache = SimpleLRUCache(256)
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -168,7 +170,7 @@ def _get_balance_at(
        to compute the net_change since that anchor.
     3. Return anchor.running_balance + net_change.
     """
-    from sqlalchemy import func, case, and_, or_
+    from sqlalchemy import and_, func, or_
 
     # ── Step 1: find the anchor row ──
     anchor_q = db.query(Transaction).filter(
@@ -232,7 +234,8 @@ def _get_balance_at(
 
 
 def _history_start(range_key: str | None) -> date | None:
-    from datetime import timedelta, date as dt_date
+    from datetime import date as dt_date
+    from datetime import timedelta
 
     today = dt_date.today()
     if range_key == "this_month":
@@ -474,7 +477,6 @@ def get_summary(
     }
 
 
-
 # ── SMS Import ────────────────────────────────────────────────────────────────
 @app.post("/imports/sms", response_model=list[TransactionOut])
 def import_sms(
@@ -579,7 +581,7 @@ async def import_statement(
 
             saved_count = 0
             for seq, row in enumerate(rows):
-                row["stmt_seq"] = seq          # preserve bank statement row order
+                row["stmt_seq"] = seq  # preserve bank statement row order
                 validated = TransactionIn(**row).model_dump()
                 # SHA-256 dedup on date+amount+description
                 fingerprint = hashlib.sha256(
@@ -663,6 +665,7 @@ async def advisor_stream(
     if _wants_last_transaction(question):
         latest = transactions[0] if transactions else None
         answer = _format_transaction(latest) if latest else "No transactions were found for this signed-in account."
+
         async def last_tx_event_generator():
             yield f"data: {answer}\n\n"
             yield "data: [DONE]\n\n"
@@ -675,6 +678,7 @@ async def advisor_stream(
 
     if _wants_overspending(question):
         answer = _format_overspending(transactions)
+
         async def overspending_event_generator():
             yield f"data: {answer}\n\n"
             yield "data: [DONE]\n\n"
@@ -727,10 +731,11 @@ async def advisor_stream(
 
     if cached_reply:
         logger.info("Cache hit for advisor stream.")
+
         async def cached_event_generator():
             # Yield cached string fully
             yield f"data: {cached_reply}\n\n"
-            
+
             assistant_msg = AIMessage(
                 conversation_id=conversation.id,
                 role="assistant",
@@ -763,7 +768,7 @@ async def advisor_stream(
             if full_reply:
                 reply_text = "".join(full_reply)
                 llm_cache.put(cache_key, reply_text)
-                
+
                 assistant_msg = AIMessage(
                     conversation_id=conversation.id,
                     role="assistant",
@@ -833,11 +838,12 @@ def delete_conversation(
     )
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
-    
+
     db.delete(conv)
     db.commit()
     logger.info("conversation.deleted user=%s id=%s", user.id, conv_id)
     return {"deleted": True}
+
 
 # ── Accounts (Multi-Account Support) ─────────────────────────────────────────
 @app.get("/accounts", response_model=list[AccountOut])

@@ -40,9 +40,9 @@ MERCHANT_PATTERNS = [
 # Date patterns found in Indian bank SMS
 # e.g. "17May26", "17-05-26", "17/05/2026", "17-May-2026"
 DATE_PATTERNS = [
-    (re.compile(r"\b(\d{2})([A-Za-z]{3})(\d{2,4})\b"), "%d%b%y"),   # 17May26 / 17May2026
-    (re.compile(r"\b(\d{2})-(\d{2})-(\d{4})\b"), "%d-%m-%Y"),        # 17-05-2026
-    (re.compile(r"\b(\d{2})/(\d{2})/(\d{4})\b"), "%d/%m/%Y"),        # 17/05/2026
+    (re.compile(r"\b(\d{2})([A-Za-z]{3})(\d{2,4})\b"), "%d%b%y"),  # 17May26 / 17May2026
+    (re.compile(r"\b(\d{2})-(\d{2})-(\d{4})\b"), "%d-%m-%Y"),  # 17-05-2026
+    (re.compile(r"\b(\d{2})/(\d{2})/(\d{4})\b"), "%d/%m/%Y"),  # 17/05/2026
     (re.compile(r"\b(\d{2})-([A-Za-z]{3})-(\d{4})\b"), "%d-%b-%Y"),  # 17-May-2026
 ]
 

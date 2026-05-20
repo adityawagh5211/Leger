@@ -8,12 +8,12 @@ PDF parsing strategy (in order of preference):
      pip install easyocr
 """
 
-import re
+import base64
 import csv
 import json
 import logging
-import base64
-from datetime import datetime, date
+import re
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from io import BytesIO, StringIO
 
@@ -77,6 +77,7 @@ def _parse_date_value(value) -> date | None:
 
 
 # ── Structured table parser ───────────────────────────────────────────────────
+
 
 def _normalize_frame(df: pd.DataFrame) -> list[dict]:
     df = df.dropna(how="all")
@@ -159,9 +160,7 @@ def _normalize_frame(df: pd.DataFrame) -> list[dict]:
 
 # ── Text-based regex row parser ───────────────────────────────────────────────
 
-_DATE_RE = re.compile(
-    r"\b(\d{1,2}[\/\-]\d{2}[\/\-]\d{4}|\d{1,2}\s+[A-Za-z]{3}\s+\d{4}|\d{1,2}[A-Za-z]{3}\d{2,4})\b"
-)
+_DATE_RE = re.compile(r"\b(\d{1,2}[\/\-]\d{2}[\/\-]\d{4}|\d{1,2}\s+[A-Za-z]{3}\s+\d{4}|\d{1,2}[A-Za-z]{3}\d{2,4})\b")
 _AMOUNT_RE = re.compile(r"([0-9,]+\.[0-9]{2})")
 _MARKDOWN_TABLE_RE = re.compile(r"^\s*\|.+\|\s*$")
 
@@ -192,16 +191,16 @@ def _parse_text_rows(text: str) -> list[dict]:
         amounts = _AMOUNT_RE.findall(line)
         if len(amounts) < 2:
             continue
-        rest = line[date_m.end():].strip()
+        rest = line[date_m.end() :].strip()
         amount_positions = [m.start() for m in _AMOUNT_RE.finditer(rest)]
         if not amount_positions:
             continue
-        description = rest[:amount_positions[0]].strip().strip("-").strip()
+        description = rest[: amount_positions[0]].strip().strip("-").strip()
         if not description:
             description = "Bank transaction"
         lower_rest = rest.lower()
-        is_credit = bool(re.search(r'\b(cr|credit|deposit|dep|salary|refund)\b|/cr/|\\bcr\\b', lower_rest))
-        is_debit = bool(re.search(r'\b(dr|debit|withdraw|paid|wdl|atm|pos|fee|charges?)\b|/dr/|\\bdr\\b', lower_rest))
+        is_credit = bool(re.search(r"\b(cr|credit|deposit|dep|salary|refund)\b|/cr/|\\bcr\\b", lower_rest))
+        is_debit = bool(re.search(r"\b(dr|debit|withdraw|paid|wdl|atm|pos|fee|charges?)\b|/dr/|\\bdr\\b", lower_rest))
         try:
             amount = Decimal(amounts[0].replace(",", ""))
         except InvalidOperation:
@@ -255,7 +254,10 @@ def _rows_from_json_text(text: str) -> list[dict]:
         frame_rows.append(
             {
                 "date": item.get("date") or item.get("txn_date") or item.get("transaction_date"),
-                "details": item.get("description") or item.get("details") or item.get("narration") or item.get("particulars"),
+                "details": item.get("description")
+                or item.get("details")
+                or item.get("narration")
+                or item.get("particulars"),
                 "debit": item.get("debit") or item.get("withdrawal") or item.get("withdrawals") or "",
                 "credit": item.get("credit") or item.get("deposit") or item.get("deposits") or "",
                 "balance": item.get("balance") or "",
@@ -274,8 +276,7 @@ def _rows_from_markdown_tables(text: str) -> list[dict]:
             return
         header = [cell.strip() for cell in table_lines[0].strip().strip("|").split("|")]
         data_lines = [
-            line for line in table_lines[1:]
-            if not re.match(r"^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$", line)
+            line for line in table_lines[1:] if not re.match(r"^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$", line)
         ]
         records = []
         for line in data_lines:
@@ -326,13 +327,14 @@ async def _gemini_parse_pdf(content: bytes) -> str:
     """Send the PDF to Gemini 1.5 Flash to extract transaction text."""
     if not settings.gemini_api_key:
         return ""
-    
+
     logger.info("Sending PDF to Gemini for extraction...")
     try:
         import google.generativeai as genai
+
         genai.configure(api_key=settings.gemini_api_key)
         model = genai.GenerativeModel("gemini-2.5-flash")
-        
+
         pdf_part = {"mime_type": "application/pdf", "data": content}
         prompt = """Extract every bank statement transaction from this PDF.
 Return only JSON with this shape:
@@ -341,12 +343,13 @@ Rules:
 - Do not include statement summary, totals, opening balance, closing balance, or blank rows.
 - Preserve full UPI narration/merchant text in description.
 - Use debit for withdrawals/expenses and credit for deposits/income. Use empty string or 0.00 for the unused side."""
-        
+
         response = await model.generate_content_async([pdf_part, prompt])
         return response.text
     except Exception as e:
         logger.warning("Gemini PDF extraction failed: %s", e)
         return ""
+
 
 async def _mistral_ocr_pdf(content: bytes) -> str:
     """Send the PDF to Mistral OCR as a fallback."""
@@ -386,8 +389,8 @@ async def _mistral_ocr_pdf(content: bytes) -> str:
         return ""
 
 
-
 # ── Public parsers ────────────────────────────────────────────────────────────
+
 
 def parse_csv(content: bytes) -> list[dict]:
     text = content.decode("utf-8-sig")

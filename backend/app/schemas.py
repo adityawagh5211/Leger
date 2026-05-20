@@ -47,7 +47,7 @@ class TransactionIn(BaseModel):
     tags: str | None = None
     notes: str | None = None
     running_balance: Decimal | None = None  # Bank balance after this transaction
-    stmt_seq: int | None = None             # Row index in bank statement (0-based)
+    stmt_seq: int | None = None  # Row index in bank statement (0-based)
 
 
 class TransactionOut(BaseModel):

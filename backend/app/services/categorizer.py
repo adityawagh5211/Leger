@@ -1,6 +1,5 @@
 import re
 
-
 CATEGORIES = [
     "Housing",
     "Groceries",
@@ -53,7 +52,6 @@ RULES: list[tuple[str, str]] = [
     ("eats", "Dining"),
     ("bites", "Dining"),
     ("food", "Dining"),
-    
     # ── Groceries ─────────────────────────────────────────────────────────────
     ("blinkit", "Groceries"),
     ("zepto", "Groceries"),
@@ -68,7 +66,6 @@ RULES: list[tuple[str, str]] = [
     ("grocery", "Groceries"),
     ("supermarket", "Groceries"),
     ("mart", "Groceries"),
-
     # ── Transport ─────────────────────────────────────────────────────────────
     ("uber", "Transport"),
     ("ola", "Transport"),
@@ -88,7 +85,6 @@ RULES: list[tuple[str, str]] = [
     ("bus", "Transport"),
     ("train", "Transport"),
     ("travel", "Transport"),
-
     # ── Shopping ──────────────────────────────────────────────────────────────
     ("amazon", "Shopping"),
     ("flipkart", "Shopping"),
@@ -105,7 +101,6 @@ RULES: list[tuple[str, str]] = [
     ("retail", "Shopping"),
     ("footwear", "Shopping"),
     ("shoes", "Shopping"),
-
     # ── Subscriptions ─────────────────────────────────────────────────────────
     ("netflix", "Subscriptions"),
     ("spotify", "Subscriptions"),
@@ -119,10 +114,8 @@ RULES: list[tuple[str, str]] = [
     ("github", "Subscriptions"),
     ("cursor", "Subscriptions"),
     ("youtube", "Subscriptions"),
-
     # ── Housing ───────────────────────────────────────────────────────────────
     ("rent", "Housing"),
-
     # ── Utilities ─────────────────────────────────────────────────────────────
     ("electricity", "Utilities"),
     ("airtel", "Utilities"),
@@ -138,7 +131,6 @@ RULES: list[tuple[str, str]] = [
     ("dth", "Utilities"),
     ("water bill", "Utilities"),
     ("gas bill", "Utilities"),
-
     # ── Health ────────────────────────────────────────────────────────────────
     ("pharmacy", "Health"),
     ("medical", "Health"),
@@ -151,11 +143,9 @@ RULES: list[tuple[str, str]] = [
     ("chemist", "Health"),
     ("wellness", "Health"),
     ("healthcare", "Health"),
-
     # ── Entertainment ─────────────────────────────────────────────────────────
     ("movie", "Entertainment"),
     ("bookmyshow", "Entertainment"),
-
     # ── Income / Salary ───────────────────────────────────────────────────────
     ("salary", "Salary"),
     ("payroll", "Salary"),

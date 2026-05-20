@@ -42,8 +42,8 @@ def monthly_summary(transactions: list[Transaction]) -> dict:
         "income": income,
         "expenses": expenses,
         "net": income - expenses,
-        "opening_balance": None,   # computed by caller via DB query
-        "closing_balance": None,   # computed by caller via DB query
+        "opening_balance": None,  # computed by caller via DB query
+        "closing_balance": None,  # computed by caller via DB query
         "cash_income": cash_income,
         "cash_expenses": cash_expenses,
         "cash_net": cash_income - cash_expenses,
@@ -54,7 +54,6 @@ def monthly_summary(transactions: list[Transaction]) -> dict:
         "period_end": end_date,
         "months_covered": len({d.strftime("%Y-%m") for d in dates}),
     }
-
 
 
 def dynamic_budget_suggestions(transactions: list[Transaction]) -> list[dict]:
@@ -140,7 +139,9 @@ def build_advisor_context(
         else:
             budget_lines.append(f"  {cat}: INR {spent} (no budget set)")
 
-    recurring_lines = [f"  {r['description']}: ~INR {r['average_amount']:.0f}/mo ({r['count']}x)" for r in recurring[:4]]
+    recurring_lines = [
+        f"  {r['description']}: ~INR {r['average_amount']:.0f}/mo ({r['count']}x)" for r in recurring[:4]
+    ]
     latest = sorted(transactions, key=lambda tx: (tx.date, tx.created_at), reverse=True)[:12]
     latest_lines = [
         f"  {tx.date.isoformat()} | {tx.type} | INR {tx.amount} | {tx.category} | {tx.description[:160]}"
@@ -174,7 +175,7 @@ Current Date: {today_str}
 Period covered: {period} across {summary["months_covered"]} calendar month(s).
 
 Last Month ({last_month}) Summary:
-  Income: INR {last_month_stats['income']} | Expenses: INR {last_month_stats['expenses']}
+  Income: INR {last_month_stats["income"]} | Expenses: INR {last_month_stats["expenses"]}
 
 Overall Snapshot:
   Income (Credits): INR {summary["income"]} | Expenses (Debits): INR {summary["expenses"]} | Net Flow: INR {summary["net"]}

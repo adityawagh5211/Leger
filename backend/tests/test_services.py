@@ -89,4 +89,3 @@ def test_auto_categorize_endpoint(client):
         )
         assert r.status_code == 200
         assert r.json()["category"] == p["expected"]
-
