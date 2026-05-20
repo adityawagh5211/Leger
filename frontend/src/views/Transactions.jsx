@@ -1,9 +1,11 @@
 import React from "react";
 import { apiFetch, KEYS, money, today, EXPENSE_CATEGORIES, CATEGORY_COLORS } from "../lib";
 import { useToast } from "../components/ui";
-import { Trash2, Upload, Search, FileText, MessageSquare, PlusCircle } from "lucide-react";
+import { Trash2, Upload, Search, FileText, MessageSquare, PlusCircle, CheckSquare } from "lucide-react";
 
 const PAGE = 50;
+// Delay (ms) before the bulk-delete API call fires, giving time to Undo
+const UNDO_DELAY = 5000;
 
 export default function Transactions() {
   const toast = useToast();
@@ -18,13 +20,22 @@ export default function Transactions() {
   const [filterType, setFilterType]     = React.useState("");
   const [smsText, setSmsText]           = React.useState("");
   const [importStatus, setImportStatus] = React.useState(null);
-  const [activeTab, setActiveTab]       = React.useState("manual"); // manual | sms | statement
+  const [activeTab, setActiveTab]       = React.useState("manual");
+
+  // Multi-select state
+  const [selectedIds, setSelectedIds]   = React.useState(new Set());
+  // IDs of rows currently animating out
+  const [deletingIds, setDeletingIds]   = React.useState(new Set());
+  // Undo state: { ids, snapshot, timer, countdown }
+  const [undoState, setUndoState]       = React.useState(null);
+  const undoCountRef                    = React.useRef(null);
 
   const [form, setForm] = React.useState({
     type: "expense", amount: "", category: "Groceries",
     description: "", date: today(), source: "cash",
   });
 
+  // ── Data Loading ────────────────────────────────────────────────────────────
   const loadTransactions = React.useCallback(async (reset = true) => {
     setLoading(true);
     try {
@@ -46,6 +57,109 @@ export default function Transactions() {
 
   React.useEffect(() => { loadTransactions(true); }, [search, filterCat, filterType]);
 
+  // ── Single delete (immediate, optimistic) ───────────────────────────────────
+  async function remove(id) {
+    // Animate row out first
+    setDeletingIds((s) => new Set([...s, id]));
+    await new Promise((r) => setTimeout(r, 280));
+    const prev = [...transactions];
+    setTransactions((t) => t.filter((x) => x.id !== id));
+    setDeletingIds((s) => { const n = new Set(s); n.delete(id); return n; });
+    try {
+      await apiFetch(`/transactions/${id}`, { method: "DELETE" });
+      toast("Transaction deleted", "success");
+    } catch (e) {
+      setTransactions(prev);
+      toast(e.message, "error");
+    }
+  }
+
+  // ── Selection helpers ───────────────────────────────────────────────────────
+  function toggleSelect(id) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (selectedIds.size === transactions.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(transactions.map((t) => t.id)));
+    }
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set());
+  }
+
+  // ── Bulk delete with undo timer ─────────────────────────────────────────────
+  function requestBulkDelete() {
+    if (selectedIds.size === 0) return;
+
+    const ids = [...selectedIds];
+    const snapshot = [...transactions];
+
+    // Animate out
+    setDeletingIds(new Set(ids));
+
+    // Commit to UI immediately (optimistic)
+    setTimeout(() => {
+      setTransactions((t) => t.filter((x) => !ids.includes(x.id)));
+      setDeletingIds(new Set());
+    }, 300);
+
+    setSelectedIds(new Set());
+
+    // Start undo countdown
+    let remaining = Math.ceil(UNDO_DELAY / 1000);
+    const undoTimer = setTimeout(() => executeBulkDelete(ids), UNDO_DELAY);
+    clearInterval(undoCountRef.current);
+    undoCountRef.current = setInterval(() => {
+      remaining -= 1;
+      setUndoState((prev) => prev ? { ...prev, countdown: remaining } : null);
+      if (remaining <= 0) clearInterval(undoCountRef.current);
+    }, 1000);
+
+    setUndoState({ ids, snapshot, timer: undoTimer, countdown: remaining });
+  }
+
+  async function executeBulkDelete(ids) {
+    clearInterval(undoCountRef.current);
+    setUndoState(null);
+    try {
+      await apiFetch("/transactions/bulk-delete", {
+        method: "POST",
+        body: JSON.stringify({ transaction_ids: ids }),
+      });
+      toast(`${ids.length} transaction${ids.length > 1 ? "s" : ""} deleted`, "success");
+    } catch (e) {
+      toast(e.message, "error");
+      // Reload to restore true state from DB
+      await loadTransactions(true);
+    }
+  }
+
+  function undoBulkDelete() {
+    if (!undoState) return;
+    clearTimeout(undoState.timer);
+    clearInterval(undoCountRef.current);
+    setTransactions(undoState.snapshot);
+    setUndoState(null);
+    toast("Deletion undone ✓", "success");
+  }
+
+  // Cleanup timers on unmount
+  React.useEffect(() => {
+    return () => {
+      if (undoState?.timer) clearTimeout(undoState.timer);
+      clearInterval(undoCountRef.current);
+    };
+  }, [undoState]);
+
+  // ── Add transaction ─────────────────────────────────────────────────────────
   async function addTransaction(e) {
     e.preventDefault();
     if (!form.amount || isNaN(Number(form.amount))) return toast("Enter a valid amount", "error");
@@ -65,18 +179,7 @@ export default function Transactions() {
     }
   }
 
-  async function remove(id) {
-    const prev = [...transactions];
-    setTransactions((t) => t.filter((x) => x.id !== id));
-    try {
-      await apiFetch(`/transactions/${id}`, { method: "DELETE" });
-      toast("Deleted", "success");
-    } catch (e) {
-      setTransactions(prev);
-      toast(e.message, "error");
-    }
-  }
-
+  // ── SMS import ──────────────────────────────────────────────────────────────
   async function importSms() {
     const messages = smsText.split(/\n+/).map((l) => l.trim()).filter(Boolean);
     if (!messages.length) return;
@@ -96,6 +199,7 @@ export default function Transactions() {
     }
   }
 
+  // ── Statement upload ────────────────────────────────────────────────────────
   async function uploadStatement(e) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -126,10 +230,13 @@ export default function Transactions() {
   }
 
   const TABS = [
-    { id: "manual",    label: "Add Manually",    Icon: PlusCircle },
-    { id: "sms",       label: "SMS Import",      Icon: MessageSquare },
-    { id: "statement", label: "Bank Statement",  Icon: FileText },
+    { id: "manual",    label: "Add Manually",   Icon: PlusCircle },
+    { id: "sms",       label: "SMS Import",     Icon: MessageSquare },
+    { id: "statement", label: "Bank Statement", Icon: FileText },
   ];
+
+  const allSelected = transactions.length > 0 && selectedIds.size === transactions.length;
+  const someSelected = selectedIds.size > 0 && !allSelected;
 
   return (
     <div className="view-transactions">
@@ -252,8 +359,20 @@ export default function Transactions() {
 
       {/* Transaction list */}
       <div className="card">
+        {/* List header with search/filter */}
         <div className="tx-list-header">
-          <div className="chart-title">Recent Transactions</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div className="chart-title">Recent Transactions</div>
+            {selectedIds.size > 0 && (
+              <span style={{
+                background: 'var(--accent)', color: 'white',
+                fontSize: 12, fontWeight: 700, padding: '2px 10px',
+                borderRadius: 99, lineHeight: 1.8,
+              }}>
+                {selectedIds.size} selected
+              </span>
+            )}
+          </div>
           <div className="tx-filters">
             <div className="search-wrap" style={{ maxWidth: 280 }}>
               <Search size={15} className="search-icon" />
@@ -274,12 +393,30 @@ export default function Transactions() {
           </div>
         </div>
 
+        {/* Desktop column headers */}
         <div className="tx-head">
-          <span>Date</span><span>Category</span><span>Description</span><span>Amount</span><span />
+          <div className="tx-checkbox-wrap">
+            <input
+              type="checkbox"
+              className="tx-checkbox"
+              checked={allSelected}
+              ref={(el) => { if (el) el.indeterminate = someSelected; }}
+              onChange={toggleSelectAll}
+              aria-label="Select all transactions"
+              title={allSelected ? "Deselect all" : "Select all"}
+            />
+          </div>
+          <span>Date</span>
+          <span>Category</span>
+          <span>Description</span>
+          <span>Amount</span>
+          <span />
         </div>
 
+        {/* Skeleton loading rows */}
         {loading && Array.from({ length: 5 }).map((_, i) => (
           <div key={i} className="tx-item">
+            <div />
             {Array.from({ length: 4 }).map((_, j) => (
               <div key={j} className="skeleton" style={{ height: 14, borderRadius: 6 }} />
             ))}
@@ -287,6 +424,7 @@ export default function Transactions() {
           </div>
         ))}
 
+        {/* Empty state */}
         {!loading && transactions.length === 0 && (
           <div style={{ textAlign: 'center', padding: '56px 24px' }}>
             <div style={{ fontSize: 40, marginBottom: 12 }}>📭</div>
@@ -295,23 +433,62 @@ export default function Transactions() {
           </div>
         )}
 
-        {!loading && transactions.map((tx) => (
-          <div className="tx-item" key={tx.id}>
-            <span className="tx-date" style={{ color: 'var(--text-secondary)', fontSize: 13, fontWeight: 500 }}>{tx.date}</span>
-            <span className="tx-cat-wrap" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: CATEGORY_COLORS[tx.category] || '#94a3b8', flexShrink: 0 }} />
-              <span style={{ color: 'var(--text-secondary)', fontSize: 13, fontWeight: 500 }}>{tx.category}</span>
-            </span>
-            <span className="tx-desc" style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.description}</span>
-            <span className={tx.type === "income" ? "tx-amount-income" : "tx-amount-expense"}>
-              {tx.type === "income" ? "+" : "−"}{money(tx.amount)}
-            </span>
-            <button className="tx-delete-btn" onClick={() => remove(tx.id)} aria-label={`Delete ${tx.description}`}>
-              <Trash2 size={14} />
-            </button>
-          </div>
-        ))}
+        {/* Transaction rows */}
+        {!loading && transactions.map((tx) => {
+          const isSelected = selectedIds.has(tx.id);
+          const isDeleting = deletingIds.has(tx.id);
+          return (
+            <div
+              key={tx.id}
+              className={`tx-item${isSelected ? " selected" : ""}${isDeleting ? " tx-deleting" : ""}`}
+              onClick={(e) => {
+                // Don't trigger selection on button clicks
+                if (e.target.closest("button") || e.target.closest(".tx-checkbox")) return;
+                toggleSelect(tx.id);
+              }}
+              style={{ cursor: 'pointer' }}
+            >
+              {/* Checkbox */}
+              <div className="tx-checkbox-wrap" onClick={(e) => e.stopPropagation()}>
+                <input
+                  type="checkbox"
+                  className="tx-checkbox"
+                  checked={isSelected}
+                  onChange={() => toggleSelect(tx.id)}
+                  aria-label={`Select ${tx.description}`}
+                />
+              </div>
 
+              <span className="tx-date" style={{ color: 'var(--text-secondary)', fontSize: 13, fontWeight: 500 }}>
+                {tx.date}
+              </span>
+
+              <span className="tx-cat-wrap" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: CATEGORY_COLORS[tx.category] || '#94a3b8', flexShrink: 0 }} />
+                <span style={{ color: 'var(--text-secondary)', fontSize: 13, fontWeight: 500 }}>{tx.category}</span>
+              </span>
+
+              <span className="tx-desc" style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {tx.description}
+              </span>
+
+              <span className={tx.type === "income" ? "tx-amount-income" : "tx-amount-expense"}>
+                {tx.type === "income" ? "+" : "−"}{money(tx.amount)}
+              </span>
+
+              <button
+                className="tx-delete-btn"
+                onClick={(e) => { e.stopPropagation(); remove(tx.id); }}
+                aria-label={`Delete ${tx.description}`}
+                title="Delete"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          );
+        })}
+
+        {/* Load more */}
         {hasMore && (
           <div style={{ padding: '16px 20px', borderTop: '1px solid var(--border)' }}>
             <button className="btn-secondary" onClick={() => loadTransactions(false)} style={{ fontSize: 14 }}>
@@ -320,6 +497,40 @@ export default function Transactions() {
           </div>
         )}
       </div>
+
+      {/* Floating bulk action bar — shown when rows are selected */}
+      {selectedIds.size > 0 && !undoState && (
+        <div className="floating-action-bar">
+          <CheckSquare size={18} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+          <span>{selectedIds.size} transaction{selectedIds.size > 1 ? "s" : ""} selected</span>
+          <button className="btn-clear-selection" onClick={clearSelection}>
+            Clear
+          </button>
+          <button className="btn-delete-bulk" onClick={requestBulkDelete}>
+            <Trash2 size={14} />
+            Delete {selectedIds.size > 1 ? `${selectedIds.size} transactions` : "transaction"}
+          </button>
+        </div>
+      )}
+
+      {/* Floating undo bar — shown during the undo countdown */}
+      {undoState && (
+        <div className="floating-undo-bar">
+          <span style={{ color: 'var(--text-secondary)' }}>
+            🗑️ Deleting {undoState.ids.length} transaction{undoState.ids.length > 1 ? "s" : ""}…
+          </span>
+          <span style={{
+            fontSize: 13, fontWeight: 700,
+            color: undoState.countdown <= 2 ? 'var(--negative)' : 'var(--text-muted)',
+            minWidth: 20, textAlign: 'center',
+          }}>
+            {undoState.countdown}s
+          </span>
+          <button className="btn-undo" onClick={undoBulkDelete}>
+            Undo
+          </button>
+        </div>
+      )}
     </div>
   );
 }

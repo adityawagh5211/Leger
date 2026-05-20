@@ -77,6 +77,10 @@ class PaginatedTransactions(BaseModel):
     total_returned: int
 
 
+class BulkDeleteRequest(BaseModel):
+    transaction_ids: list[str]
+
+
 # ── Budgets ───────────────────────────────────────────────────────────────────
 
 

@@ -37,6 +37,7 @@ from .schemas import (
     BenchmarkOut,
     BudgetIn,
     BudgetOut,
+    BulkDeleteRequest,
     CategorizeBatchRequest,
     CategorizeSingleRequest,
     CategorizeSingleResponse,
@@ -394,6 +395,31 @@ def delete_transaction(
     db.commit()
     logger.info("transaction.deleted user=%s id=%s", user.id, transaction_id)
     return {"deleted": True}
+
+
+@app.post("/transactions/bulk-delete")
+def bulk_delete_transactions(
+    payload: BulkDeleteRequest,
+    user: UserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    txs = (
+        db.query(Transaction)
+        .filter(
+            Transaction.id.in_(payload.transaction_ids),
+            Transaction.user_id == user.id,
+        )
+        .all()
+    )
+    if not txs:
+        return {"deleted_count": 0}
+
+    count = len(txs)
+    for tx in txs:
+        db.delete(tx)
+    db.commit()
+    logger.info("transactions.bulk_deleted user=%s count=%d", user.id, count)
+    return {"deleted_count": count}
 
 
 # ── Budgets ───────────────────────────────────────────────────────────────────

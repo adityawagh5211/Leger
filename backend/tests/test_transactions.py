@@ -116,3 +116,33 @@ def test_unauthorized_without_header(client):
     """Endpoints should reject requests without auth."""
     r = client.get("/transactions")
     assert r.status_code in (401, 403, 422)
+
+
+def test_bulk_delete_transactions(client):
+    """POST /transactions/bulk-delete should remove multiple transactions."""
+    ids = []
+    for desc in ["Tx A", "Tx B", "Tx C"]:
+        r = client.post(
+            "/transactions",
+            json={
+                "type": "expense",
+                "category": "Dining",
+                "amount": "100",
+                "description": desc,
+                "date": "2026-05-10",
+            },
+            headers=AUTH_HEADER,
+        )
+        assert r.status_code == 201
+        ids.append(r.json()["id"])
+
+    payload = {"transaction_ids": ids}
+    r = client.post("/transactions/bulk-delete", json=payload, headers=AUTH_HEADER)
+    assert r.status_code == 200
+    assert r.json()["deleted_count"] == 3
+
+    r = client.get("/transactions", headers=AUTH_HEADER)
+    assert r.status_code == 200
+    items = r.json()["items"]
+    for tx in items:
+        assert tx["id"] not in ids
