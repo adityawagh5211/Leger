@@ -166,38 +166,6 @@ app = FastAPI(title="Ledger API", version="1.0.1", docs_url="/docs")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.get_cors_origins(),
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"],
-)
-
-
-# ── Global error handler — ensures CORS headers on 500s ───────────────────────
-# Starlette's ServerErrorMiddleware intercepts unhandled exceptions before the
-# CORS middleware can add headers. This handler re-adds them so the browser
-# gets a proper CORS-compliant error response instead of a blocked request.
-@app.exception_handler(Exception)
-async def _global_exception_handler(request, exc: Exception):
-    from fastapi.responses import JSONResponse
-
-    logger.exception("Unhandled error: %s %s", request.method, request.url.path)
-    origin = request.headers.get("origin", "")
-    allowed = settings.get_cors_origins()
-    headers = {}
-    if origin and (origin in allowed or "*" in allowed):
-        headers["Access-Control-Allow-Origin"] = origin
-        headers["Access-Control-Allow-Credentials"] = "true"
-        headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
-        headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type"
-    return JSONResponse(
-        status_code=500,
-        content={"detail": "Internal server error"},
-        headers=headers,
-    )
-
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def _month_range(month: str) -> tuple[date, date]:
@@ -1580,3 +1548,16 @@ async def recategorize_uncategorized(
     db.commit()
     logger.info("recategorize user=%s updated=%d of %d offset=%d", user.id, updated, len(txs), offset)
     return {"updated": updated, "total_checked": len(txs), "offset": offset, "has_more": len(txs) == limit}
+
+
+# ── Outermost ASGI CORS Wrap ──────────────────────────────────────────────────
+# We wrap the FastAPI app instance at the ASGI level. This places CORSMiddleware
+# outside of Starlette's ServerErrorMiddleware, ensuring that even unhandled 500
+# exceptions receive CORS headers and don't get blocked by the browser.
+app = CORSMiddleware(
+    app,
+    allow_origins=settings.get_cors_origins(),
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
+)
