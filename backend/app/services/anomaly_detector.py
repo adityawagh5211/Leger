@@ -51,6 +51,7 @@ _DUPLICATE_WINDOW_HOURS: int = 48
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
+
 def _sorted_floats(values: list[float]) -> list[float]:
     """Return a new sorted list of floats."""
     return sorted(values)
@@ -117,6 +118,7 @@ def _severity_from_ratio(ratio: float) -> str:
 
 
 # ── Anomaly detection strategies ─────────────────────────────────────────────
+
 
 def _detect_large_purchases(
     expense_txns: list[Transaction],
@@ -280,6 +282,7 @@ def _detect_duplicate_suspects(
 
 # ── De-duplication ────────────────────────────────────────────────────────────
 
+
 def _deduplicate(anomalies: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
     Remove exact duplicates (same transaction_id + anomaly_type).
@@ -299,6 +302,7 @@ def _deduplicate(anomalies: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
+
 
 def detect_anomalies(transactions: list[Transaction]) -> list[dict[str, Any]]:
     """

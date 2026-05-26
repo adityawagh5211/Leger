@@ -24,8 +24,8 @@ TestSession = sessionmaker(bind=TEST_ENGINE)
 
 # Stable test identity
 TEST_USER_ID = "test-user-1"
-TEST_USER    = UserContext(id=TEST_USER_ID, email="test@ledger.local")
-AUTH_HEADER  = {"Authorization": f"Bearer {TEST_USER_ID}"}
+TEST_USER = UserContext(id=TEST_USER_ID, email="test@ledger.local")
+AUTH_HEADER = {"Authorization": f"Bearer {TEST_USER_ID}"}
 
 
 def override_get_db():
@@ -42,7 +42,7 @@ def override_get_current_user() -> UserContext:
 
 
 # Register dependency overrides
-app.dependency_overrides[get_db]           = override_get_db
+app.dependency_overrides[get_db] = override_get_db
 app.dependency_overrides[get_current_user] = override_get_current_user
 
 

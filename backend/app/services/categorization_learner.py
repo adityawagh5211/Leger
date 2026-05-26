@@ -33,6 +33,7 @@ logger = logging.getLogger("ledger.cat_learner")
 
 # ── Description normalisation & hashing ──────────────────────────────────────
 
+
 def _normalise(description: str) -> str:
     """
     Normalise a description for consistent hashing.
@@ -59,6 +60,7 @@ def _hash_description(description: str) -> str:
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
+
 
 def get_user_overrides(db: Session, user_id: str) -> dict[str, str]:
     """
@@ -90,14 +92,10 @@ def get_user_overrides(db: Session, user_id: str) -> dict[str, str]:
             .all()
         )
         overrides: dict[str, str] = {row.description_hash: row.category for row in rows}
-        logger.debug(
-            "get_user_overrides: loaded %d overrides for user %s", len(overrides), user_id
-        )
+        logger.debug("get_user_overrides: loaded %d overrides for user %s", len(overrides), user_id)
         return overrides
     except Exception:
-        logger.exception(
-            "get_user_overrides: DB error for user %s — returning empty dict", user_id
-        )
+        logger.exception("get_user_overrides: DB error for user %s — returning empty dict", user_id)
         return {}
 
 
@@ -187,15 +185,11 @@ def record_correction(
                 db.commit()
         except Exception:
             db.rollback()
-            logger.exception(
-                "record_correction: retry also failed for user=%s hash=%s", user_id, desc_hash[:12]
-            )
+            logger.exception("record_correction: retry also failed for user=%s hash=%s", user_id, desc_hash[:12])
 
     except Exception:
         db.rollback()
-        logger.exception(
-            "record_correction: unexpected error for user=%s hash=%s", user_id, desc_hash[:12]
-        )
+        logger.exception("record_correction: unexpected error for user=%s hash=%s", user_id, desc_hash[:12])
 
 
 def apply_user_overrides(
@@ -247,11 +241,7 @@ def correction_stats(db: Session, user_id: str) -> dict[str, Any]:
                                        — most frequently corrected categories
     """
     try:
-        rows = (
-            db.query(CategoryCorrection)
-            .filter(CategoryCorrection.user_id == user_id)
-            .all()
-        )
+        rows = db.query(CategoryCorrection).filter(CategoryCorrection.user_id == user_id).all()
 
         total_corrections = len(rows)
         total_confirmations = sum(r.correction_count for r in rows)
@@ -274,7 +264,5 @@ def correction_stats(db: Session, user_id: str) -> dict[str, Any]:
         }
 
     except Exception:
-        logger.exception(
-            "correction_stats: DB error for user=%s — returning empty stats", user_id
-        )
+        logger.exception("correction_stats: DB error for user=%s — returning empty stats", user_id)
         return {"total_corrections": 0, "total_confirmations": 0, "top_categories": []}

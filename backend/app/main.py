@@ -99,7 +99,7 @@ class TTLCache:
 
     def __init__(self, maxsize: int = 512, default_ttl: int = 3600):
         self._cache: dict[str, dict] = {}
-        self.maxsize    = maxsize
+        self.maxsize = maxsize
         self.default_ttl = default_ttl
 
     def _evict_expired(self):
@@ -125,7 +125,7 @@ class TTLCache:
         if key in self._cache:
             self._cache.pop(key)
         self._cache[key] = {
-            "data":    value,
+            "data": value,
             "expires": time.time() + (ttl or self.default_ttl),
         }
         if len(self._cache) > self.maxsize:
@@ -144,6 +144,7 @@ llm_cache = TTLCache(maxsize=512, default_ttl=settings.llm_cache_ttl_seconds)
 # ── New request schemas ───────────────────────────────────────────────────────
 class CategoryCorrectionRequest(BaseModel):
     category: str
+
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -394,21 +395,17 @@ def get_profile_stats(
     from sqlalchemy import func
 
     # SQLite-compatible separate aggregate queries
-    total_txns = db.query(func.count(Transaction.id)).filter(
-        Transaction.user_id == user.id
-    ).scalar() or 0
+    total_txns = db.query(func.count(Transaction.id)).filter(Transaction.user_id == user.id).scalar() or 0
     total_income = db.query(func.coalesce(func.sum(Transaction.amount), 0)).filter(
         Transaction.user_id == user.id, Transaction.type == "income"
     ).scalar() or Decimal("0")
     total_expenses = db.query(func.coalesce(func.sum(Transaction.amount), 0)).filter(
         Transaction.user_id == user.id, Transaction.type == "expense"
     ).scalar() or Decimal("0")
-    accounts_count = db.query(func.count(Account.id)).filter(
-        Account.user_id == user.id, Account.is_active.is_(True)
-    ).scalar() or 0
-    budgets_count = db.query(func.count(Budget.id)).filter(
-        Budget.user_id == user.id
-    ).scalar() or 0
+    accounts_count = (
+        db.query(func.count(Account.id)).filter(Account.user_id == user.id, Account.is_active.is_(True)).scalar() or 0
+    )
+    budgets_count = db.query(func.count(Budget.id)).filter(Budget.user_id == user.id).scalar() or 0
 
     return ProfileStatsOut(
         total_transactions=total_txns,
@@ -828,9 +825,8 @@ async def advisor_stream(
 
     # Enrich advisor context with anomalies + forecast
     anomalies = detect_anomalies(transactions)
-    forecast  = generate_forecast(transactions)
-    context   = build_advisor_context(transactions, budgets, anomalies=anomalies, forecast=forecast)
-
+    forecast = generate_forecast(transactions)
+    context = build_advisor_context(transactions, budgets, anomalies=anomalies, forecast=forecast)
 
     # Load conversation history if continuing a thread
     history = []
@@ -1058,7 +1054,6 @@ async def auto_categorize_batch(
 ):
     results = await categorize_batch(payload.transactions)
     return results
-
 
 
 # ── Proactive Insights ───────────────────────────────────────────────────────
@@ -1427,10 +1422,10 @@ def get_forecast(
         return cached
 
     transactions = _tx_query(db, user.id).limit(1000).all()
-    budgets      = db.query(Budget).filter(Budget.user_id == user.id).all()
-    forecast     = generate_forecast(transactions)
-    warnings     = budget_breach_warnings(transactions, budgets)
-    result       = {**forecast, "budget_warnings": warnings}
+    budgets = db.query(Budget).filter(Budget.user_id == user.id).all()
+    forecast = generate_forecast(transactions)
+    warnings = budget_breach_warnings(transactions, budgets)
+    result = {**forecast, "budget_warnings": warnings}
 
     llm_cache.put(cache_key, result, ttl=3600)
     return result
@@ -1465,11 +1460,11 @@ async def proactive_insights_v2(
         return cached
 
     transactions = _tx_query(db, user.id).limit(300).all()
-    budgets      = db.query(Budget).filter(Budget.user_id == user.id).all()
+    budgets = db.query(Budget).filter(Budget.user_id == user.id).all()
 
     # Enrich with anomalies and forecast
     anomalies = detect_anomalies(transactions)
-    forecast  = generate_forecast(transactions)
+    forecast = generate_forecast(transactions)
 
     result = await generate_proactive_insights(transactions, budgets, anomalies, forecast)
     llm_cache.put(cache_key, result, ttl=settings.insight_cache_ttl_hours * 3600)
@@ -1490,7 +1485,7 @@ def correct_transaction_category(
         raise HTTPException(status_code=404, detail="Transaction not found")
 
     old_category = tx.category
-    tx.category  = payload.category
+    tx.category = payload.category
     tx.confidence = 1.0  # User correction = full confidence
     db.commit()
 
@@ -1502,7 +1497,10 @@ def correct_transaction_category(
 
     logger.info(
         "category.corrected user=%s tx=%s %s→%s",
-        user.id, transaction_id, old_category, payload.category,
+        user.id,
+        transaction_id,
+        old_category,
+        payload.category,
     )
     return {"corrected": True, "old_category": old_category, "new_category": payload.category}
 
@@ -1514,6 +1512,7 @@ def embedding_cache_stats(
 ):
     """Return embedding cache statistics for monitoring."""
     from .services.embedding_cache import embedding_cache
+
     return embedding_cache.get_stats()
 
 
@@ -1550,11 +1549,10 @@ async def recategorize_uncategorized(
         if result["category"] != "Other" and result.get("confidence", 0) >= 0.6:
             tx = db.get(Transaction, result["id"])
             if tx:
-                tx.category           = result["category"]
-                tx.confidence         = result.get("confidence")
+                tx.category = result["category"]
+                tx.confidence = result.get("confidence")
                 tx.merchant_normalized = result.get("merchant")
                 updated += 1
     db.commit()
     logger.info("recategorize user=%s updated=%d of %d offset=%d", user.id, updated, len(txs), offset)
     return {"updated": updated, "total_checked": len(txs), "offset": offset, "has_more": len(txs) == limit}
-

@@ -216,6 +216,4 @@ class CategoryCorrection(Base):
     correction_count: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
-    __table_args__ = (
-        UniqueConstraint("user_id", "description_hash", name="uq_cat_correction_user_hash"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "description_hash", name="uq_cat_correction_user_hash"),)

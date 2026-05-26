@@ -72,67 +72,71 @@ def _rule_based_analysis(payments: list[dict]) -> list[dict]:
 
     NEGOTIABLE_CATEGORIES = {
         "Subscriptions": {
-            "negotiable":  True,
+            "negotiable": True,
             "savings_pct": 0.20,
-            "strategy":    "Check for annual plans (typically 15-40% cheaper). Look for family/group plans. Use cashback portals for renewals.",
+            "strategy": "Check for annual plans (typically 15-40% cheaper). Look for family/group plans. Use cashback portals for renewals.",
             "alternatives": ["Annual plan", "Shared subscription", "Cashback portal renewal"],
-            "difficulty":  "easy",
+            "difficulty": "easy",
         },
         "Utilities": {
-            "negotiable":  True,
+            "negotiable": True,
             "savings_pct": 0.10,
-            "strategy":    "Compare tariff plans on your provider's website. Switch to time-of-use plans. Consider prepaid meters for electricity.",
+            "strategy": "Compare tariff plans on your provider's website. Switch to time-of-use plans. Consider prepaid meters for electricity.",
             "alternatives": ["Alternative provider", "Prepaid plan"],
-            "difficulty":  "medium",
+            "difficulty": "medium",
         },
         "Insurance": {
-            "negotiable":  True,
+            "negotiable": True,
             "savings_pct": 0.15,
-            "strategy":    "Compare premiums on PolicyBazaar. Increase deductible to lower premium. Ask for no-claim bonus discount.",
+            "strategy": "Compare premiums on PolicyBazaar. Increase deductible to lower premium. Ask for no-claim bonus discount.",
             "alternatives": ["PolicyBazaar comparison", "Higher deductible plan"],
-            "difficulty":  "medium",
+            "difficulty": "medium",
         },
         "Health": {
-            "negotiable":  True,
+            "negotiable": True,
             "savings_pct": 0.12,
-            "strategy":    "Switch to generic medicines. Use Tata 1mg/PharmEasy for 20-40% discounts. Negotiate lab test rates.",
+            "strategy": "Switch to generic medicines. Use Tata 1mg/PharmEasy for 20-40% discounts. Negotiate lab test rates.",
             "alternatives": ["Tata 1mg", "PharmEasy", "Generic medicines"],
-            "difficulty":  "easy",
+            "difficulty": "easy",
         },
         "Housing": {
-            "negotiable":  True,
+            "negotiable": True,
             "savings_pct": 0.08,
-            "strategy":    "Negotiate rent during renewal citing market rates. Offer longer lease for discount. Maintain property well for leverage.",
+            "strategy": "Negotiate rent during renewal citing market rates. Offer longer lease for discount. Maintain property well for leverage.",
             "alternatives": ["Market rate negotiation", "Longer lease deal"],
-            "difficulty":  "hard",
+            "difficulty": "hard",
         },
     }
 
     for payment in payments:
         category = payment.get("category", "Other")
-        amount   = float(payment.get("average_amount", payment.get("amount", 0)))
+        amount = float(payment.get("average_amount", payment.get("amount", 0)))
         merchant = payment.get("description", payment.get("merchant", "Unknown"))
 
         rule = NEGOTIABLE_CATEGORIES.get(category)
         if rule:
-            results.append({
-                "merchant":         merchant,
-                "current_cost":     amount,
-                "negotiable":       rule["negotiable"],
-                "savings_potential": round(amount * rule["savings_pct"], 2),
-                "strategy":         rule["strategy"],
-                "alternatives":     rule.get("alternatives", []),
-                "difficulty":       rule["difficulty"],
-            })
+            results.append(
+                {
+                    "merchant": merchant,
+                    "current_cost": amount,
+                    "negotiable": rule["negotiable"],
+                    "savings_potential": round(amount * rule["savings_pct"], 2),
+                    "strategy": rule["strategy"],
+                    "alternatives": rule.get("alternatives", []),
+                    "difficulty": rule["difficulty"],
+                }
+            )
         elif amount > 500:
-            results.append({
-                "merchant":         merchant,
-                "current_cost":     amount,
-                "negotiable":       False,
-                "savings_potential": 0,
-                "strategy":         "Review if this service is still needed. Consider downgrading to a basic plan.",
-                "alternatives":     [],
-                "difficulty":       "easy",
-            })
+            results.append(
+                {
+                    "merchant": merchant,
+                    "current_cost": amount,
+                    "negotiable": False,
+                    "savings_potential": 0,
+                    "strategy": "Review if this service is still needed. Consider downgrading to a basic plan.",
+                    "alternatives": [],
+                    "difficulty": "easy",
+                }
+            )
 
     return results

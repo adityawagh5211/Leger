@@ -15,8 +15,8 @@ from typing import Any
 logger = logging.getLogger("ledger.transaction_cache")
 
 # ── Constants ────────────────────────────────────────────────────────────────
-EMBEDDING_CACHE_SIZE = 2048   # Max number of descriptions to cache
-SIMILARITY_THRESHOLD = 1.0    # Exact match similarity threshold
+EMBEDDING_CACHE_SIZE = 2048  # Max number of descriptions to cache
+SIMILARITY_THRESHOLD = 1.0  # Exact match similarity threshold
 
 
 class EmbeddingCache:
@@ -70,10 +70,7 @@ class EmbeddingCache:
                 self._cache.move_to_end(key)
 
         if match:
-            logger.debug(
-                "Transaction cache hit: '%s' (cat=%s)",
-                description[:40], match["category"]
-            )
+            logger.debug("Transaction cache hit: '%s' (cat=%s)", description[:40], match["category"])
             return {
                 "category": match["category"],
                 "confidence": match["confidence"],

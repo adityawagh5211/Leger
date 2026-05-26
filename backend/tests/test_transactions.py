@@ -118,6 +118,7 @@ def test_unauthorized_without_header(client):
     so this check is validated at the integration level instead.
     """
     import pytest
+
     pytest.skip("Auth dependency is globally mocked in conftest — tested at integration level")
 
 

@@ -33,6 +33,7 @@ _XIRR_INITIAL_GUESS: float = 0.1  # 10 % initial IRR guess
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
+
 def _years_held(purchase_date: date) -> float:
     """
     Compute how many fractional years have elapsed since purchase_date.
@@ -146,6 +147,7 @@ def _mean_std(values: list[float]) -> tuple[float, float]:
 
 
 # ── Core computation ──────────────────────────────────────────────────────────
+
 
 def compute_portfolio_analytics(
     portfolios: list,
@@ -342,14 +344,10 @@ def compute_portfolio_analytics(
         "xirr": xirr_result,
         "max_drawdown_pct": round(max_drawdown_pct, 2),
         "best_performer": (
-            {"symbol": best_symbol, "return_pct": round(best_return * 100, 2)}
-            if best_symbol is not None
-            else None
+            {"symbol": best_symbol, "return_pct": round(best_return * 100, 2)} if best_symbol is not None else None
         ),
         "worst_performer": (
-            {"symbol": worst_symbol, "return_pct": round(worst_return * 100, 2)}
-            if worst_symbol is not None
-            else None
+            {"symbol": worst_symbol, "return_pct": round(worst_return * 100, 2)} if worst_symbol is not None else None
         ),
         "by_asset_type": by_asset_type,
     }

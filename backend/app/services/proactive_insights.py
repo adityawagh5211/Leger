@@ -44,19 +44,18 @@ def _build_proactive_context(
     forecast: dict | None = None,
 ) -> str:
     """Build compact context for proactive insights LLM call."""
-    summary    = monthly_summary(transactions)
+    summary = monthly_summary(transactions)
     budget_map = {b.category: b.monthly_limit for b in budgets}
-    recurring  = recurring_payments(transactions)
+    recurring = recurring_payments(transactions)
 
     last_30 = [t for t in transactions if t.date >= date.today() - timedelta(days=30)]
     prev_30 = [
-        t for t in transactions
-        if date.today() - timedelta(days=60) <= t.date < date.today() - timedelta(days=30)
+        t for t in transactions if date.today() - timedelta(days=60) <= t.date < date.today() - timedelta(days=30)
     ]
 
     last_spend = sum(t.amount for t in last_30 if t.type == "expense")
     prev_spend = sum(t.amount for t in prev_30 if t.type == "expense")
-    trend_pct  = float((last_spend - prev_spend) / prev_spend * 100) if prev_spend > 0 else 0.0
+    trend_pct = float((last_spend - prev_spend) / prev_spend * 100) if prev_spend > 0 else 0.0
 
     cat_last: dict[str, Decimal] = defaultdict(Decimal)
     cat_prev: dict[str, Decimal] = defaultdict(Decimal)
@@ -75,9 +74,9 @@ def _build_proactive_context(
 
     # Category breakdown with budget status and trends
     for cat, amt in sorted(summary["by_category"].items(), key=lambda x: x[1], reverse=True)[:8]:
-        limit   = budget_map.get(cat)
+        limit = budget_map.get(cat)
         pct_str = f" | budget ₹{limit:.0f} ({int(amt / limit * 100)}%)" if limit else ""
-        change  = ""
+        change = ""
         if cat in cat_prev and cat_prev[cat] > 0:
             c = float((cat_last[cat] - cat_prev[cat]) / cat_prev[cat] * 100)
             change = f" | {'↑' if c > 0 else '↓'}{abs(c):.0f}% vs last month"
@@ -139,28 +138,30 @@ def _rule_based_insights(
     anomalies: list[dict] | None = None,
 ) -> list[dict]:
     """Fallback rule-based proactive insights."""
-    summary    = monthly_summary(transactions)
+    summary = monthly_summary(transactions)
     budget_map = {b.category: b.monthly_limit for b in budgets}
-    recurring  = recurring_payments(transactions)
-    insights:  list[dict] = []
+    recurring = recurring_payments(transactions)
+    insights: list[dict] = []
 
     last_30 = [t for t in transactions if t.date >= date.today() - timedelta(days=30)]
     prev_30 = [
-        t for t in transactions
-        if date.today() - timedelta(days=60) <= t.date < date.today() - timedelta(days=30)
+        t for t in transactions if date.today() - timedelta(days=60) <= t.date < date.today() - timedelta(days=30)
     ]
     last_spend = sum(t.amount for t in last_30 if t.type == "expense")
     prev_spend = sum(t.amount for t in prev_30 if t.type == "expense")
-    trend_pct  = float((last_spend - prev_spend) / prev_spend * 100) if prev_spend > 0 else 0
+    trend_pct = float((last_spend - prev_spend) / prev_spend * 100) if prev_spend > 0 else 0
 
     # Anomaly insights (highest priority)
     if anomalies:
         for a in [x for x in anomalies if x.get("severity") == "high"][:2]:
-            insights.append({
-                "type": "warning", "priority": 5,
-                "text": f"Unusual transaction detected: ₹{a['amount']:.0f} in {a['category']} — {a['message'][:50]}",
-                "category": a.get("category"),
-            })
+            insights.append(
+                {
+                    "type": "warning",
+                    "priority": 5,
+                    "text": f"Unusual transaction detected: ₹{a['amount']:.0f} in {a['category']} — {a['message'][:50]}",
+                    "category": a.get("category"),
+                }
+            )
 
     # Budget overages
     for cat, spent in summary["by_category"].items():
@@ -169,58 +170,79 @@ def _rule_based_insights(
             continue
         ratio = float(spent / limit)
         if ratio >= 1.0:
-            insights.append({
-                "type": "warning", "priority": 5,
-                "text": f"{cat} is ₹{float(spent - limit):.0f} over budget — ₹{float(spent):.0f} vs ₹{float(limit):.0f} limit.",
-                "category": cat,
-            })
+            insights.append(
+                {
+                    "type": "warning",
+                    "priority": 5,
+                    "text": f"{cat} is ₹{float(spent - limit):.0f} over budget — ₹{float(spent):.0f} vs ₹{float(limit):.0f} limit.",
+                    "category": cat,
+                }
+            )
         elif ratio >= 0.9:
             days_left = (date.today().replace(day=28) - date.today()).days
-            insights.append({
-                "type": "warning", "priority": 4,
-                "text": f"{cat} at {int(ratio * 100)}% of budget with ~{days_left} days remaining this month.",
-                "category": cat,
-            })
+            insights.append(
+                {
+                    "type": "warning",
+                    "priority": 4,
+                    "text": f"{cat} at {int(ratio * 100)}% of budget with ~{days_left} days remaining this month.",
+                    "category": cat,
+                }
+            )
 
     # Spending trend
     if trend_pct > 20:
-        insights.append({
-            "type": "warning", "priority": 4,
-            "text": f"Overall spending up {trend_pct:.0f}% vs last month — review your top categories.",
-            "category": None,
-        })
+        insights.append(
+            {
+                "type": "warning",
+                "priority": 4,
+                "text": f"Overall spending up {trend_pct:.0f}% vs last month — review your top categories.",
+                "category": None,
+            }
+        )
     elif trend_pct < -15:
-        insights.append({
-            "type": "positive", "priority": 3,
-            "text": f"Spending down {abs(trend_pct):.0f}% vs last month — great financial discipline!",
-            "category": None,
-        })
+        insights.append(
+            {
+                "type": "positive",
+                "priority": 3,
+                "text": f"Spending down {abs(trend_pct):.0f}% vs last month — great financial discipline!",
+                "category": None,
+            }
+        )
 
     # Savings rate
-    income   = summary["income"]
+    income = summary["income"]
     expenses = summary["expenses"]
     savings_rate = float((income - expenses) / income * 100) if income > 0 else 0
     if savings_rate >= 30:
-        insights.append({
-            "type": "positive", "priority": 3,
-            "text": f"Savings rate of {savings_rate:.0f}% is excellent — you're building wealth consistently.",
-            "category": None,
-        })
+        insights.append(
+            {
+                "type": "positive",
+                "priority": 3,
+                "text": f"Savings rate of {savings_rate:.0f}% is excellent — you're building wealth consistently.",
+                "category": None,
+            }
+        )
     elif savings_rate < 5 and income > 0:
-        insights.append({
-            "type": "tip", "priority": 4,
-            "text": f"Savings rate is only {savings_rate:.0f}% — target 20% by reducing top spending categories.",
-            "category": None,
-        })
+        insights.append(
+            {
+                "type": "tip",
+                "priority": 4,
+                "text": f"Savings rate is only {savings_rate:.0f}% — target 20% by reducing top spending categories.",
+                "category": None,
+            }
+        )
 
     # Recurring payments summary
     if len(recurring) >= 3:
         total_rec = float(sum(r["average_amount"] for r in recurring))
-        insights.append({
-            "type": "info", "priority": 2,
-            "text": f"{len(recurring)} recurring payments totaling ₹{total_rec:.0f}/mo detected.",
-            "category": None,
-        })
+        insights.append(
+            {
+                "type": "info",
+                "priority": 2,
+                "text": f"{len(recurring)} recurring payments totaling ₹{total_rec:.0f}/mo detected.",
+                "category": None,
+            }
+        )
 
     # Sort by priority descending
     insights.sort(key=lambda x: x["priority"], reverse=True)
@@ -238,7 +260,9 @@ async def generate_proactive_insights(
     Always tries LLM first (via ai_router), falls back to rule-based.
     """
     if not transactions:
-        return [{"type": "info", "priority": 1, "text": "Add transactions to get personalized insights.", "category": None}]
+        return [
+            {"type": "info", "priority": 1, "text": "Add transactions to get personalized insights.", "category": None}
+        ]
 
     context = _build_proactive_context(transactions, budgets, anomalies, forecast)
 
@@ -255,9 +279,9 @@ async def generate_proactive_insights(
                 if not isinstance(item, dict):
                     continue
                 insight = {
-                    "type":     item.get("type", "info"),
+                    "type": item.get("type", "info"),
                     "priority": int(item.get("priority", 2)),
-                    "text":     str(item.get("text", ""))[:200],
+                    "text": str(item.get("text", ""))[:200],
                     "category": item.get("category"),
                 }
                 if insight["text"] and insight["type"] in ("warning", "tip", "positive", "info"):

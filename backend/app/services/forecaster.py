@@ -48,6 +48,7 @@ _TREND_THRESHOLD: float = 0.05  # 5 %
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
+
 def _ewma(values: list[float], alpha: float = _EWMA_ALPHA) -> float:
     """
     Compute the Exponential Weighted Moving Average of a chronological list.
@@ -112,7 +113,7 @@ def _trend(monthly_values: list[float]) -> str:
     if len(monthly_values) < 2:
         return "stable"
     recent = monthly_values[-2:]
-    prior = monthly_values[-4:-2] if len(monthly_values) >= 4 else monthly_values[:max(1, len(monthly_values) - 2)]
+    prior = monthly_values[-4:-2] if len(monthly_values) >= 4 else monthly_values[: max(1, len(monthly_values) - 2)]
     recent_avg = sum(recent) / len(recent)
     prior_avg = sum(prior) / len(prior) if prior else recent_avg
     if prior_avg == 0.0:
@@ -140,6 +141,7 @@ def _monthly_buckets(transactions: list[Transaction]) -> dict[str, dict[str, flo
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
+
 
 def generate_forecast(transactions: list[Transaction]) -> dict[str, Any]:
     """

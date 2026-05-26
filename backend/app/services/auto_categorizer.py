@@ -35,11 +35,11 @@ from .embedding_cache import embedding_cache
 logger = logging.getLogger("ledger.autocategorize")
 
 # ── Configuration ──────────────────────────────────────────────────────────────
-RULES_CONFIDENCE        = 0.95   # Confidence assigned to rule matches
-EMBEDDING_CONFIDENCE    = 0.88   # Confidence floor for embedding matches
-LLM_TRIGGER_THRESHOLD   = 0.85   # Send to LLM if confidence below this
-LLM_BATCH_SIZE          = 15     # Transactions per LLM batch call
-LLM_PARALLEL_BATCHES    = 3      # Max parallel batch calls
+RULES_CONFIDENCE = 0.95  # Confidence assigned to rule matches
+EMBEDDING_CONFIDENCE = 0.88  # Confidence floor for embedding matches
+LLM_TRIGGER_THRESHOLD = 0.85  # Send to LLM if confidence below this
+LLM_BATCH_SIZE = 15  # Transactions per LLM batch call
+LLM_PARALLEL_BATCHES = 3  # Max parallel batch calls
 
 # ── System Prompts ──────────────────────────────────────────────────────────────
 CATEGORIZE_SYSTEM = """You are a financial transaction categorizer for an Indian personal finance app.
@@ -110,13 +110,15 @@ def _extract_json(raw: str) -> Any:
 
 def _has_ai_provider() -> bool:
     """Check if any AI provider is configured."""
-    return any([
-        settings.groq_api_key,
-        settings.cerebras_api_key,
-        settings.gemini_api_key,
-        settings.cohere_api_key,
-        settings.openrouter_api_key,
-    ])
+    return any(
+        [
+            settings.groq_api_key,
+            settings.cerebras_api_key,
+            settings.gemini_api_key,
+            settings.cohere_api_key,
+            settings.openrouter_api_key,
+        ]
+    )
 
 
 async def categorize_single(
@@ -134,6 +136,7 @@ async def categorize_single(
     # ── Tier 1: User-specific override ─────────────────────────────────────
     if user_overrides:
         import hashlib
+
         key = hashlib.sha256(description.lower().strip().encode()).hexdigest()
         if key in user_overrides:
             return {
@@ -163,11 +166,11 @@ async def categorize_single(
         sim_result = embedding_cache.find_similar(description)
         if sim_result and sim_result["confidence"] >= EMBEDDING_CONFIDENCE:
             return {
-                "category":   sim_result["category"],
+                "category": sim_result["category"],
                 "confidence": sim_result["confidence"],
-                "merchant":   sim_result.get("merchant") or extract_upi_merchant(description),
-                "source":     "embedding_cache",
-                "reason":     f"Similar to cached transaction (sim={sim_result['similarity']:.2f})",
+                "merchant": sim_result.get("merchant") or extract_upi_merchant(description),
+                "source": "embedding_cache",
+                "reason": f"Similar to cached transaction (sim={sim_result['similarity']:.2f})",
             }
 
     # ── Tier 4: LLM (only if provider available and description is ambiguous) ──
@@ -197,11 +200,11 @@ async def categorize_single(
             confidence = min(1.0, max(0.0, float(result_data.get("confidence", 0.5))))
 
             response = {
-                "category":   category,
+                "category": category,
                 "confidence": confidence,
-                "merchant":   merchant,
-                "source":     "llm",
-                "reason":     result_data.get("reason", "LLM classification"),
+                "merchant": merchant,
+                "source": "llm",
+                "reason": result_data.get("reason", "LLM classification"),
             }
 
             # Cache result in embedding cache for future
@@ -213,11 +216,11 @@ async def categorize_single(
         logger.warning("LLM categorization failed for '%s...': %s", description[:50], e)
 
     return {
-        "category":   "Other",
+        "category": "Other",
         "confidence": 0.1,
-        "merchant":   extract_upi_merchant(description),
-        "source":     "fallback",
-        "reason":     "Could not determine category",
+        "merchant": extract_upi_merchant(description),
+        "source": "fallback",
+        "reason": "Could not determine category",
     }
 
 
@@ -246,8 +249,10 @@ async def categorize_batch(
             key = hashlib.sha256(desc.lower().strip().encode()).hexdigest()
             if key in user_overrides:
                 results[tid] = {
-                    "id": tid, "category": user_overrides[key],
-                    "confidence": 1.0, "merchant": extract_upi_merchant(desc),
+                    "id": tid,
+                    "category": user_overrides[key],
+                    "confidence": 1.0,
+                    "merchant": extract_upi_merchant(desc),
                     "reason": "User override",
                 }
                 continue
@@ -257,8 +262,10 @@ async def categorize_batch(
         if rule_result != "Other":
             merchant = extract_upi_merchant(desc)
             results[tid] = {
-                "id": tid, "category": rule_result,
-                "confidence": RULES_CONFIDENCE, "merchant": merchant,
+                "id": tid,
+                "category": rule_result,
+                "confidence": RULES_CONFIDENCE,
+                "merchant": merchant,
                 "reason": "Keyword rule match",
             }
             embedding_cache.put(desc, rule_result, RULES_CONFIDENCE, merchant)
@@ -269,7 +276,8 @@ async def categorize_batch(
             sim_result = embedding_cache.find_similar(desc)
             if sim_result and sim_result["confidence"] >= EMBEDDING_CONFIDENCE:
                 results[tid] = {
-                    "id": tid, "category": sim_result["category"],
+                    "id": tid,
+                    "category": sim_result["category"],
                     "confidence": sim_result["confidence"],
                     "merchant": sim_result.get("merchant") or extract_upi_merchant(desc),
                     "reason": "Embedding similarity match",
@@ -281,7 +289,7 @@ async def categorize_batch(
 
     # Process LLM batch in parallel chunks
     if needs_llm and _has_ai_provider():
-        chunks = [needs_llm[i:i + LLM_BATCH_SIZE] for i in range(0, len(needs_llm), LLM_BATCH_SIZE)]
+        chunks = [needs_llm[i : i + LLM_BATCH_SIZE] for i in range(0, len(needs_llm), LLM_BATCH_SIZE)]
         tasks = [_llm_batch_chunk(chunk) for chunk in chunks]
         chunk_results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -310,16 +318,12 @@ async def _llm_batch_chunk(transactions: list[dict]) -> dict[str, dict]:
     """Send a single batch chunk to the LLM and parse results."""
     cats = ", ".join(EXPENSE_CATEGORIES)
     system = BATCH_CATEGORIZE_SYSTEM.format(categories=cats)
-    user_content = "\n".join(
-        f"- id: {tx['id']}, description: {tx['description']}"
-        for tx in transactions
-    )
+    user_content = "\n".join(f"- id: {tx['id']}, description: {tx['description']}" for tx in transactions)
     messages = [{"role": "user", "content": user_content}]
 
     results = {}
     try:
-        raw = await ai_router.generate(system, messages, task_type="categorize",
-                                       max_tokens=LLM_BATCH_SIZE * 30)
+        raw = await ai_router.generate(system, messages, task_type="categorize", max_tokens=LLM_BATCH_SIZE * 30)
         parsed = _extract_json(raw)
 
         if not isinstance(parsed, list):
@@ -339,8 +343,11 @@ async def _llm_batch_chunk(transactions: list[dict]) -> dict[str, dict]:
             confidence = min(1.0, max(0.0, float(item.get("confidence", 0.5))))
 
             results[tid] = {
-                "id": tid, "category": cat, "confidence": confidence,
-                "merchant": merchant, "reason": item.get("reason", "LLM batch"),
+                "id": tid,
+                "category": cat,
+                "confidence": confidence,
+                "merchant": merchant,
+                "reason": item.get("reason", "LLM batch"),
             }
 
             # Cache good results

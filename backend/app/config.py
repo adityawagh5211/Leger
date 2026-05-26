@@ -29,17 +29,14 @@ class Settings(BaseSettings):
     # CORS — comma-separated or JSON list of allowed origins
     # Render sets env vars as plain strings, so support both formats:
     #   CORS_ORIGINS=https://my-app.vercel.app,https://my-app-preview.vercel.app
-    cors_origins_raw: str = (
-        "http://localhost:5173,"
-        "http://127.0.0.1:5173,"
-        "https://ledger-beta-two.vercel.app"
-    )
+    cors_origins_raw: str = "http://localhost:5173,http://127.0.0.1:5173,https://ledger-beta-two.vercel.app"
 
     @property
     def cors_origins(self) -> list[str]:
         raw = self.cors_origins_raw.strip()
         if raw.startswith("["):  # JSON array format
             import json
+
             return json.loads(raw)
         return [o.strip() for o in raw.split(",") if o.strip()]
 
@@ -84,13 +81,15 @@ class Settings(BaseSettings):
                     file=sys.stderr,
                 )
                 sys.exit(1)
-            if not any([
-                self.groq_api_key,
-                self.cerebras_api_key,
-                self.gemini_api_key,
-                self.cohere_api_key,
-                self.openrouter_api_key,
-            ]):
+            if not any(
+                [
+                    self.groq_api_key,
+                    self.cerebras_api_key,
+                    self.gemini_api_key,
+                    self.cohere_api_key,
+                    self.openrouter_api_key,
+                ]
+            ):
                 print(
                     "WARNING: No AI backend configured. Set at least one provider API key.",
                     file=sys.stderr,

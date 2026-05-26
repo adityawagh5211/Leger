@@ -26,11 +26,11 @@ def compute_credit_health(
 
     scores = {}
 
-    incomes  = [float(t.amount) for t in transactions if t.type == "income"]
+    incomes = [float(t.amount) for t in transactions if t.type == "income"]
     expenses = [float(t.amount) for t in transactions if t.type == "expense"]
-    total_income  = sum(incomes)  or 1
+    total_income = sum(incomes) or 1
     total_expense = sum(expenses)
-    savings_rate  = max(0, (total_income - total_expense) / total_income)
+    savings_rate = max(0, (total_income - total_expense) / total_income)
 
     # ── 1. Savings Rate (0-180 points) ────────────────────────────────────────
     if savings_rate >= 0.35:
@@ -55,13 +55,12 @@ def compute_credit_health(
                 cat_spent[t.category] += float(t.amount)
 
         adherent = sum(
-            1 for b in budgets
-            if float(b.monthly_limit) > 0 and cat_spent.get(b.category, 0) <= float(b.monthly_limit)
+            1 for b in budgets if float(b.monthly_limit) > 0 and cat_spent.get(b.category, 0) <= float(b.monthly_limit)
         )
         adherence_rate = adherent / len(budgets)
-        budget_score   = int(180 * adherence_rate)
+        budget_score = int(180 * adherence_rate)
     else:
-        budget_score   = 90  # neutral
+        budget_score = 90  # neutral
         adherence_rate = 0.5
     scores["budget_adherence"] = {"score": budget_score, "max": 180, "rate": round(adherence_rate * 100, 1)}
 
@@ -72,10 +71,10 @@ def compute_credit_health(
             daily_spend[str(t.date)] += float(t.amount)
 
     if len(daily_spend) > 1:
-        vals    = list(daily_spend.values())
-        mean    = sum(vals) / len(vals)
+        vals = list(daily_spend.values())
+        mean = sum(vals) / len(vals)
         variance = sum((v - mean) ** 2 for v in vals) / len(vals)
-        cv      = (variance ** 0.5) / mean if mean > 0 else 0
+        cv = (variance**0.5) / mean if mean > 0 else 0
         if cv < 0.3:
             consistency_score = 135
         elif cv < 0.6:
@@ -105,11 +104,11 @@ def compute_credit_health(
 
     # ── 5. Credit Utilization Proxy (0-90 points) ─────────────────────────────
     if accounts:
-        total_balance   = sum(float(a.balance) for a in accounts if a.is_active)
+        total_balance = sum(float(a.balance) for a in accounts if a.is_active)
         credit_accounts = [a for a in accounts if a.account_type == "credit"]
         if credit_accounts:
-            credit_balance  = sum(float(a.balance) for a in credit_accounts)
-            utilization     = abs(credit_balance) / (abs(total_balance) + 1)
+            credit_balance = sum(float(a.balance) for a in credit_accounts)
+            utilization = abs(credit_balance) / (abs(total_balance) + 1)
             if utilization < 0.2:
                 credit_score = 90
             elif utilization < 0.35:
@@ -134,8 +133,8 @@ def compute_credit_health(
     if len(monthly_income) >= 2:
         inc_vals = list(monthly_income.values())
         inc_mean = sum(inc_vals) / len(inc_vals)
-        inc_var  = sum((v - inc_mean) ** 2 for v in inc_vals) / len(inc_vals)
-        inc_cv   = (inc_var ** 0.5) / inc_mean if inc_mean > 0 else 1
+        inc_var = sum((v - inc_mean) ** 2 for v in inc_vals) / len(inc_vals)
+        inc_cv = (inc_var**0.5) / inc_mean if inc_mean > 0 else 1
         if inc_cv < 0.1:
             income_score = 135
         elif inc_cv < 0.25:
@@ -156,22 +155,22 @@ def compute_credit_health(
 
     sorted_months = sorted(monthly_net.items())
     if len(sorted_months) >= 3:
-        recent_half = sorted_months[len(sorted_months) // 2:]
-        prior_half  = sorted_months[:len(sorted_months) // 2]
-        recent_avg  = sum(v for _, v in recent_half) / len(recent_half)
-        prior_avg   = sum(v for _, v in prior_half)  / len(prior_half)
+        recent_half = sorted_months[len(sorted_months) // 2 :]
+        prior_half = sorted_months[: len(sorted_months) // 2]
+        recent_avg = sum(v for _, v in recent_half) / len(recent_half)
+        prior_avg = sum(v for _, v in prior_half) / len(prior_half)
         if recent_avg > prior_avg * 1.10:
             trend_score = 90
-            trend       = "improving"
+            trend = "improving"
         elif recent_avg > prior_avg * 0.95:
             trend_score = 65
-            trend       = "stable"
+            trend = "stable"
         else:
             trend_score = 30
-            trend       = "declining"
+            trend = "declining"
     else:
         trend_score = 45
-        trend       = "stable"
+        trend = "stable"
     scores["savings_trend"] = {"score": trend_score, "max": 90, "trend": trend}
 
     # ── Total ──────────────────────────────────────────────────────────────────
@@ -200,12 +199,9 @@ def compute_credit_health(
     # Emergency fund proxy: months of expenses covered by bank balances
     if accounts:
         bank_balances = sum(
-            float(a.balance) for a in accounts
-            if a.is_active and a.account_type in ("savings", "current", "wallet")
+            float(a.balance) for a in accounts if a.is_active and a.account_type in ("savings", "current", "wallet")
         )
-        avg_monthly_expense = total_expense / max(
-            len({t.date.strftime("%Y-%m") for t in transactions}), 1
-        )
+        avg_monthly_expense = total_expense / max(len({t.date.strftime("%Y-%m") for t in transactions}), 1)
         emergency_months = bank_balances / avg_monthly_expense if avg_monthly_expense > 0 else 0
     else:
         emergency_months = None
@@ -223,11 +219,11 @@ def compute_credit_health(
         tips.append("Your savings trend is declining — review last 3 months' expenses")
 
     return {
-        "score":            total,
-        "grade":            grade,
-        "color":            color,
-        "breakdown":        scores,
-        "trend":            trend,
+        "score": total,
+        "grade": grade,
+        "color": color,
+        "breakdown": scores,
+        "trend": trend,
         "emergency_months": round(emergency_months, 1) if emergency_months is not None else None,
-        "tips":             tips,
+        "tips": tips,
     }

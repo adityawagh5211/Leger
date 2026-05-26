@@ -30,56 +30,57 @@ Output format:
 
 
 def monthly_summary(transactions: list[Transaction]) -> dict:
-    income   = sum((t.amount for t in transactions if t.type == "income"),  Decimal("0"))
+    income = sum((t.amount for t in transactions if t.type == "income"), Decimal("0"))
     expenses = sum((t.amount for t in transactions if t.type == "expense"), Decimal("0"))
-    by_category: dict[str, Decimal]          = defaultdict(Decimal)
-    by_day:      dict[str, dict]             = defaultdict(lambda: {"income": Decimal("0"), "expenses": Decimal("0")})
-    by_month:    dict[str, dict]             = defaultdict(lambda: {"income": Decimal("0"), "expenses": Decimal("0")})
+    by_category: dict[str, Decimal] = defaultdict(Decimal)
+    by_day: dict[str, dict] = defaultdict(lambda: {"income": Decimal("0"), "expenses": Decimal("0")})
+    by_month: dict[str, dict] = defaultdict(lambda: {"income": Decimal("0"), "expenses": Decimal("0")})
     dates = [tx.date for tx in transactions]
 
-    cash_income   = sum((t.amount for t in transactions if t.type == "income"  and t.source == "cash"), Decimal("0"))
+    cash_income = sum((t.amount for t in transactions if t.type == "income" and t.source == "cash"), Decimal("0"))
     cash_expenses = sum((t.amount for t in transactions if t.type == "expense" and t.source == "cash"), Decimal("0"))
 
     merchant_totals: dict[str, Decimal] = defaultdict(Decimal)
 
     for tx in transactions:
-        day   = str(tx.date)
+        day = str(tx.date)
         month = tx.date.strftime("%Y-%m")
         if tx.type == "expense":
             by_category[tx.category] += tx.amount
-            by_day[day]["expenses"]   += tx.amount
+            by_day[day]["expenses"] += tx.amount
             by_month[month]["expenses"] += tx.amount
             # Track merchant totals (use normalized merchant or description)
             merchant = tx.merchant_normalized or tx.description
             merchant_totals[merchant] += tx.amount
         else:
-            by_day[day]["income"]   += tx.amount
+            by_day[day]["income"] += tx.amount
             by_month[month]["income"] += tx.amount
 
     start_date = min(dates).isoformat() if dates else None
-    end_date   = max(dates).isoformat() if dates else None
+    end_date = max(dates).isoformat() if dates else None
 
     # Top merchants by spend
     top_merchants = sorted(
         [{"merchant": m, "amount": float(a)} for m, a in merchant_totals.items()],
-        key=lambda x: x["amount"], reverse=True
+        key=lambda x: x["amount"],
+        reverse=True,
     )[:8]
 
     return {
-        "income":         income,
-        "expenses":       expenses,
-        "net":            income - expenses,
+        "income": income,
+        "expenses": expenses,
+        "net": income - expenses,
         "opening_balance": None,
         "closing_balance": None,
-        "cash_income":    cash_income,
-        "cash_expenses":  cash_expenses,
-        "cash_net":       cash_income - cash_expenses,
-        "by_category":   dict(by_category),
-        "by_day":         dict(by_day),
-        "by_month":       dict(by_month),
-        "top_merchants":  top_merchants,
-        "period_start":   start_date,
-        "period_end":     end_date,
+        "cash_income": cash_income,
+        "cash_expenses": cash_expenses,
+        "cash_net": cash_income - cash_expenses,
+        "by_category": dict(by_category),
+        "by_day": dict(by_day),
+        "by_month": dict(by_month),
+        "top_merchants": top_merchants,
+        "period_start": start_date,
+        "period_end": end_date,
         "months_covered": len({d.strftime("%Y-%m") for d in dates}),
     }
 
@@ -87,15 +88,15 @@ def monthly_summary(transactions: list[Transaction]) -> dict:
 def dynamic_budget_suggestions(transactions: list[Transaction]) -> list[dict]:
     """Suggest budgets based on observed monthly spending average at 90% cap."""
     totals: dict[str, Decimal] = defaultdict(Decimal)
-    months  = {tx.date.strftime("%Y-%m") for tx in transactions}
+    months = {tx.date.strftime("%Y-%m") for tx in transactions}
     divisor = Decimal(max(len(months), 1))
     for tx in transactions:
         totals[tx.category] += tx.amount
     return [
         {
-            "category":     cat,
+            "category": cat,
             "monthly_limit": round((totals[cat] / divisor) * Decimal("0.9"), 2),
-            "strategy":     f"dynamic_{len(months) or 1}mo_90",
+            "strategy": f"dynamic_{len(months) or 1}mo_90",
         }
         for cat in EXPENSE_CATEGORIES
         if totals[cat] > 0
@@ -104,8 +105,8 @@ def dynamic_budget_suggestions(transactions: list[Transaction]) -> list[dict]:
 
 def compute_insights(transactions: list[Transaction], budgets: list[Budget]) -> list[str]:
     """Rule-based insights for dashboard display."""
-    summary    = monthly_summary(transactions)
-    insights:  list[str] = []
+    summary = monthly_summary(transactions)
+    insights: list[str] = []
     budget_map = {b.category: b.monthly_limit for b in budgets}
 
     for category, spent in summary["by_category"].items():
@@ -128,7 +129,7 @@ def compute_insights(transactions: list[Transaction], budgets: list[Budget]) -> 
         insights.append(f"Top weekly merchant: {merchant[:40]} at ₹{amount}.")
 
     # Savings rate insight
-    income   = summary["income"]
+    income = summary["income"]
     expenses = summary["expenses"]
     if income > 0:
         savings_rate = int(((income - expenses) / income) * 100)
@@ -150,22 +151,24 @@ def recurring_payments(transactions: list[Transaction]) -> list[dict]:
     for (description, category), items in grouped.items():
         if len(items) >= 2:
             amounts = [item.amount for item in items]
-            avg     = sum(amounts, Decimal("0")) / len(amounts)
-            dates   = sorted(item.date for item in items)
+            avg = sum(amounts, Decimal("0")) / len(amounts)
+            dates = sorted(item.date for item in items)
             # Estimate next payment date
             if len(dates) >= 2:
                 avg_gap_days = (dates[-1] - dates[0]).days // (len(dates) - 1)
-                next_date    = dates[-1] + timedelta(days=avg_gap_days)
+                next_date = dates[-1] + timedelta(days=avg_gap_days)
             else:
                 next_date = None
-            recurring.append({
-                "description":    description.title(),
-                "category":       category,
-                "average_amount": avg,
-                "count":          len(items),
-                "last_date":      dates[-1].isoformat(),
-                "next_expected":  next_date.isoformat() if next_date else None,
-            })
+            recurring.append(
+                {
+                    "description": description.title(),
+                    "category": category,
+                    "average_amount": avg,
+                    "count": len(items),
+                    "last_date": dates[-1].isoformat(),
+                    "next_expected": next_date.isoformat() if next_date else None,
+                }
+            )
     return sorted(recurring, key=lambda x: x["average_amount"], reverse=True)
 
 
@@ -176,20 +179,21 @@ def _compute_savings_trend(summary: dict) -> str:
         return ""
     recent_month = months[-1][1]
     prior_months = months[:-1]
-    recent_rate  = float(recent_month["income"] - recent_month["expenses"]) / max(float(recent_month["income"]), 1)
-    prior_rates  = [
+    recent_rate = float(recent_month["income"] - recent_month["expenses"]) / max(float(recent_month["income"]), 1)
+    prior_rates = [
         (float(m["income"] - m["expenses"]) / max(float(m["income"]), 1))
-        for _, m in prior_months if float(m["income"]) > 0
+        for _, m in prior_months
+        if float(m["income"]) > 0
     ]
     if not prior_rates:
         return ""
     avg_prior = sum(prior_rates) / len(prior_rates)
-    delta     = recent_rate - avg_prior
+    delta = recent_rate - avg_prior
     if delta > 0.05:
-        return f"Savings improving: {avg_prior*100:.0f}% → {recent_rate*100:.0f}%"
+        return f"Savings improving: {avg_prior * 100:.0f}% → {recent_rate * 100:.0f}%"
     elif delta < -0.05:
-        return f"Savings declining: {avg_prior*100:.0f}% → {recent_rate*100:.0f}%"
-    return f"Savings stable at ~{recent_rate*100:.0f}%"
+        return f"Savings declining: {avg_prior * 100:.0f}% → {recent_rate * 100:.0f}%"
+    return f"Savings stable at ~{recent_rate * 100:.0f}%"
 
 
 def build_advisor_context(
@@ -199,9 +203,9 @@ def build_advisor_context(
     forecast: dict | None = None,
 ) -> str:
     """Build a rich, token-efficient financial context string for the advisor."""
-    summary    = monthly_summary(transactions)
+    summary = monthly_summary(transactions)
     budget_map = {b.category: b.monthly_limit for b in budgets}
-    recurring  = recurring_payments(transactions)
+    recurring = recurring_payments(transactions)
 
     # Budget vs spend lines (top 10 by spend)
     budget_lines = []
@@ -215,15 +219,11 @@ def build_advisor_context(
             budget_lines.append(f"  {cat}: ₹{spent:.0f} (no budget)")
 
     # Top merchants
-    merchant_lines = [
-        f"  {r['merchant'][:35]}: ₹{r['amount']:.0f}"
-        for r in summary["top_merchants"][:5]
-    ]
+    merchant_lines = [f"  {r['merchant'][:35]}: ₹{r['amount']:.0f}" for r in summary["top_merchants"][:5]]
 
     # Recurring payments
     recurring_lines = [
-        f"  {r['description'][:30]}: ~₹{r['average_amount']:.0f}/mo "
-        f"(next ~{r['next_expected'] or 'unknown'})"
+        f"  {r['description'][:30]}: ~₹{r['average_amount']:.0f}/mo (next ~{r['next_expected'] or 'unknown'})"
         for r in recurring[:5]
     ]
 
@@ -248,9 +248,9 @@ def build_advisor_context(
         else "No transactions"
     )
 
-    today_str   = date.today().isoformat()
-    last_month  = (date.today().replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
-    lm_stats    = summary["by_month"].get(last_month, {"income": Decimal("0"), "expenses": Decimal("0")})
+    today_str = date.today().isoformat()
+    last_month = (date.today().replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
+    lm_stats = summary["by_month"].get(last_month, {"income": Decimal("0"), "expenses": Decimal("0")})
     savings_trend = _compute_savings_trend(summary)
 
     opening_bal = summary.get("opening_balance")
@@ -260,7 +260,7 @@ def build_advisor_context(
     else:
         balance_line = f"  Net Cash Flow: ₹{summary['net']} (no bank balance data)"
 
-    income   = summary["income"]
+    income = summary["income"]
     expenses = summary["expenses"]
     savings_rate_pct = int((float(income - expenses) / max(float(income), 1)) * 100)
 
@@ -283,13 +283,15 @@ def build_advisor_context(
             limit = budget_map.get(cat)
             if limit and proj["projected_30d"] > float(limit):
                 excess = proj["projected_30d"] - float(limit)
-                breach_warnings.append(f"  🔴 {cat}: projected ₹{proj['projected_30d']:.0f} vs budget ₹{float(limit):.0f} (+₹{excess:.0f})")
+                breach_warnings.append(
+                    f"  🔴 {cat}: projected ₹{proj['projected_30d']:.0f} vs budget ₹{float(limit):.0f} (+₹{excess:.0f})"
+                )
         if breach_warnings:
             forecast_section = "\nBudget Breach Forecasts (next 30 days):\n" + "\n".join(breach_warnings[:3])
 
     context = f"""[Financial Snapshot — {period}]
 Today: {today_str}
-Period: {summary['months_covered']} month(s) — {period}
+Period: {summary["months_covered"]} month(s) — {period}
 
 Overall:
   Income: ₹{income:.0f} | Expenses: ₹{expenses:.0f} | Net: ₹{float(income - expenses):.0f}
@@ -298,22 +300,22 @@ Balance:
 {balance_line}
 
 Last Month ({last_month}):
-  Income: ₹{lm_stats['income']:.0f} | Expenses: ₹{lm_stats['expenses']:.0f}
+  Income: ₹{lm_stats["income"]:.0f} | Expenses: ₹{lm_stats["expenses"]:.0f}
 
 Top Spending (category vs budget):
-{chr(10).join(budget_lines) or '  No expense data.'}
+{chr(10).join(budget_lines) or "  No expense data."}
 
 Top Merchants:
-{chr(10).join(merchant_lines) or '  No data.'}
+{chr(10).join(merchant_lines) or "  No data."}
 
 Monthly Breakdown:
-{chr(10).join(month_lines) or '  No monthly data.'}
+{chr(10).join(month_lines) or "  No monthly data."}
 
 Last 20 Transactions:
-{chr(10).join(latest_lines) or '  No transactions found.'}
+{chr(10).join(latest_lines) or "  No transactions found."}
 
 Recurring Payments:
-{chr(10).join(recurring_lines) or '  None detected.'}{anomaly_section}{forecast_section}
+{chr(10).join(recurring_lines) or "  None detected."}{anomaly_section}{forecast_section}
 
 Total transactions: {len(transactions)}"""
 

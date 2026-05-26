@@ -20,12 +20,12 @@ logger = logging.getLogger("ledger.ai_router")
 
 # ── Task-specific token budgets ───────────────────────────────────────────────
 TASK_TOKENS = {
-    "categorize":  150,
-    "insights":    400,
-    "advisor":     900,
-    "negotiate":   600,
-    "receipt":     300,
-    "default":     512,
+    "categorize": 150,
+    "insights": 400,
+    "advisor": 900,
+    "negotiate": 600,
+    "receipt": 300,
+    "default": 512,
 }
 
 
@@ -57,7 +57,7 @@ async def _retry_async(coro_fn, max_retries: int = 2, base_delay: float = 0.5):
                 raise
             if attempt == max_retries:
                 raise
-            delay = base_delay * (2 ** attempt)
+            delay = base_delay * (2**attempt)
             logger.debug("Retrying after %.1fs (attempt %d/%d)", delay, attempt + 1, max_retries)
             await asyncio.sleep(delay)
 
@@ -208,10 +208,12 @@ class CohereAdapter:
             if msg["role"] == "user":
                 message = msg["content"]
             else:
-                chat_history.append({
-                    "role": "USER" if msg["role"] == "user" else "CHATBOT",
-                    "message": msg["content"],
-                })
+                chat_history.append(
+                    {
+                        "role": "USER" if msg["role"] == "user" else "CHATBOT",
+                        "message": msg["content"],
+                    }
+                )
 
         response = await client.chat_stream(
             message=message,
@@ -286,11 +288,11 @@ class AIRouter:
 
     def __init__(self):
         self.adapters = [
-            ("Groq",        GroqAdapter()),
-            ("Cerebras",    CerebrasAdapter()),
-            ("Gemini",      GeminiAdapter()),
-            ("Cohere",      CohereAdapter()),
-            ("OpenRouter",  OpenRouterAdapter()),
+            ("Groq", GroqAdapter()),
+            ("Cerebras", CerebrasAdapter()),
+            ("Gemini", GeminiAdapter()),
+            ("Cohere", CohereAdapter()),
+            ("OpenRouter", OpenRouterAdapter()),
         ]
 
     async def stream(

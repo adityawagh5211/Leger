@@ -87,8 +87,31 @@ def _normalize_frame(df: pd.DataFrame) -> list[dict]:
         (
             normalized[c]
             for c in normalized
-            if c in {"description", "details", "narration", "particulars", "receiver name", "recipient", "merchant", "vendor"}
-            or any(token in c for token in ("description", "detail", "narration", "particular", "remarks", "receiver", "recipient", "merchant", "vendor"))
+            if c
+            in {
+                "description",
+                "details",
+                "narration",
+                "particulars",
+                "receiver name",
+                "recipient",
+                "merchant",
+                "vendor",
+            }
+            or any(
+                token in c
+                for token in (
+                    "description",
+                    "detail",
+                    "narration",
+                    "particular",
+                    "remarks",
+                    "receiver",
+                    "recipient",
+                    "merchant",
+                    "vendor",
+                )
+            )
         ),
         None,
     )
