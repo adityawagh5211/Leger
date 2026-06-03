@@ -14,7 +14,7 @@ import {
 } from "recharts";
 
 const TIME_FILTERS = [
-  { id: "this_month",   label: "This Month" },
+  { id: "30d",          label: "30 Days" },
   { id: "3m",          label: "3 Months" },
   { id: "current_year",label: "This Year" },
   { id: "all",         label: "All Time" },
@@ -27,7 +27,7 @@ export default function Dashboard({ analyticsOnly = false }) {
   const toast = useToast();
   const [summary,   setSummary]   = React.useState(null);
   const [loading,   setLoading]   = React.useState(true);
-  const [timeRange, setTimeRange] = React.useState("this_month");
+  const [timeRange, setTimeRange] = React.useState("30d");
   const [anomalies, setAnomalies] = React.useState([]);
   const [forecast,  setForecast]  = React.useState(null);
   const [showAllAnomalies, setShowAllAnomalies] = React.useState(false);

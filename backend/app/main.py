@@ -272,8 +272,8 @@ def _history_start(range_key: str | None) -> date | None:
     from datetime import timedelta
 
     today = dt_date.today()
-    if range_key == "this_month":
-        return today.replace(day=1)
+    if range_key in ("this_month", "30d"):
+        return today - timedelta(days=30)
     if range_key == "current_year":
         return today.replace(month=1, day=1)
     if not range_key or range_key == "3m":
