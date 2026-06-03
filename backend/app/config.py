@@ -71,6 +71,7 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         env_parse_none_str="",
         populate_by_name=True,
+        extra="ignore",
     )
 
     def validate_for_production(self) -> None:
