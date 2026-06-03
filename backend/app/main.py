@@ -162,7 +162,7 @@ Base.metadata.create_all(bind=engine)
 limiter = Limiter(key_func=get_remote_address)
 
 # ── App ───────────────────────────────────────────────────────────────────────
-app = FastAPI(title="Ledger API", version="1.0.1", docs_url="/docs")
+app = FastAPI(title="Ledger API", version="1.2.0", docs_url="/docs")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
