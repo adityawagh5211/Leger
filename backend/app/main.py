@@ -154,9 +154,23 @@ logging.basicConfig(
 )
 logger = logging.getLogger("ledger.api")
 
+from sqlalchemy import inspect, text
+
 # ── Database bootstrap ────────────────────────────────────────────────────────
 # NOTE: In production, use `alembic upgrade head` instead.
 Base.metadata.create_all(bind=engine)
+
+# Ad-hoc migration: Ensure avatar_url exists since Alembic is not currently configured
+try:
+    inspector = inspect(engine)
+    if inspector.has_table("users"):
+        columns = [col["name"] for col in inspector.get_columns("users")]
+        if "avatar_url" not in columns:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE users ADD COLUMN avatar_url TEXT"))
+                logger.info("Migrated: Added avatar_url to users table.")
+except Exception as e:
+    logger.warning("Failed to auto-migrate schema: %s", e)
 
 # ── Rate limiter ──────────────────────────────────────────────────────────────
 limiter = Limiter(key_func=get_remote_address)
