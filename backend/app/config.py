@@ -66,6 +66,12 @@ class Settings(BaseSettings):
     environment: str = "development"
     debug: bool = False
 
+    # Run create_all + ad-hoc column migrations at app import. entrypoint.sh already
+    # performs the same DDL on container start, so this can be set to false in
+    # production (RUN_DB_BOOTSTRAP=false) to skip redundant inspector round-trips on
+    # every cold start. Defaults true so local/dev "just works".
+    run_db_bootstrap: bool = True
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

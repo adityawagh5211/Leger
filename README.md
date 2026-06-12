@@ -47,8 +47,8 @@ and get AI-powered financial insights — all with local-first privacy.
         ┌───────────────────────┼──────────────────────┐
         ▼                       ▼                      ▼
 ┌──────────────┐  ┌───────────────────────────┐  ┌───────────────────┐
-│  PostgreSQL  │  │ Multi-Provider AI Router  │  │ PaddleOCR Engine  │
-│  (psycopg2)  │  │ (Groq/Cerebras/Gemini/..) │  │ (Receipt Scanning)│
+│  PostgreSQL  │  │ Multi-Provider AI Router  │  │ Vision OCR (LLM)  │
+│  (psycopg3)  │  │ (Groq/Cerebras/Gemini/..) │  │ (Gemini receipts) │
 └──────────────┘  └───────────────────────────┘  └───────────────────┘
 ```
 
@@ -223,7 +223,7 @@ ledger/
 │   │   ├── App.jsx               # Shell with 10 nav tabs
 │   │   ├── main.jsx              # Entry point + ToastProvider
 │   │   ├── lib.js                # API helpers, formatters
-│   │   ├── styles.css            # Full design system (~650 lines)
+│   │   ├── styles.css            # Dark dual-palette design system (lime + crimson)
 │   │   ├── components/
 │   │   │   ├── CommandPalette.jsx # ⌘K palette (21 actions)
 │   │   │   └── ui.jsx            # Toast system

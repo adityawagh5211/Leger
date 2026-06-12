@@ -15,7 +15,8 @@ from pydantic import BaseModel
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
-from sqlalchemy.orm import Session
+from sqlalchemy import inspect, text
+from sqlalchemy.orm import Session, selectinload
 
 from .auth import get_current_user
 from .config import settings
@@ -154,29 +155,30 @@ logging.basicConfig(
 )
 logger = logging.getLogger("ledger.api")
 
-from sqlalchemy import inspect, text
-
 # ── Database bootstrap ────────────────────────────────────────────────────────
-# NOTE: In production, use `alembic upgrade head` instead.
-Base.metadata.create_all(bind=engine)
+# NOTE: In production, use `alembic upgrade head` instead. entrypoint.sh runs the
+# same DDL on container start, so set RUN_DB_BOOTSTRAP=false in production to skip
+# these redundant inspector round-trips on every cold start.
+if settings.run_db_bootstrap:
+    Base.metadata.create_all(bind=engine)
 
-# Ad-hoc migration: Ensure avatar_url exists since Alembic is not currently configured
-try:
-    inspector = inspect(engine)
-    if inspector.has_table("users"):
-        columns = [col["name"] for col in inspector.get_columns("users")]
-        if "avatar_url" not in columns:
-            with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE users ADD COLUMN avatar_url TEXT"))
-                logger.info("Migrated: Added avatar_url to users table.")
-except Exception as e:
-    logger.warning("Failed to auto-migrate schema: %s", e)
+    # Ad-hoc migration: Ensure avatar_url exists since Alembic is not configured
+    try:
+        inspector = inspect(engine)
+        if inspector.has_table("users"):
+            columns = [col["name"] for col in inspector.get_columns("users")]
+            if "avatar_url" not in columns:
+                with engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE users ADD COLUMN avatar_url TEXT"))
+                    logger.info("Migrated: Added avatar_url to users table.")
+    except Exception as e:
+        logger.warning("Failed to auto-migrate schema: %s", e)
 
 # ── Rate limiter ──────────────────────────────────────────────────────────────
 limiter = Limiter(key_func=get_remote_address)
 
 # ── App ───────────────────────────────────────────────────────────────────────
-app = FastAPI(title="Ledger API", version="1.2.0", docs_url="/docs")
+app = FastAPI(title="Ledger API", version="1.3.0", docs_url="/docs")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -218,7 +220,7 @@ def _get_balance_at(
        to compute the net_change since that anchor.
     3. Return anchor.running_balance + net_change.
     """
-    from sqlalchemy import and_, func, or_
+    from sqlalchemy import and_, case, func, or_
 
     # ── Step 1: find the anchor row ──
     anchor_q = db.query(Transaction).filter(
@@ -260,23 +262,25 @@ def _get_balance_at(
         ),
     )
 
-    post_q = db.query(Transaction).filter(
+    # Single SQL aggregate (income - expense) instead of pulling every row into
+    # Python and summing. Avoids O(n²) work when this is called per-row during
+    # statement import, and keeps memory flat regardless of history size.
+    signed_amount = case(
+        (Transaction.type == "income", Transaction.amount),
+        else_=-Transaction.amount,
+    )
+    net_q = db.query(func.coalesce(func.sum(signed_amount), 0)).filter(
         Transaction.user_id == user_id,
         Transaction.id != anchor.id,
         Transaction.source != "cash",
         after_filter,
     )
     if as_of_date:
-        post_q = post_q.filter(Transaction.date < as_of_date)
+        net_q = net_q.filter(Transaction.date < as_of_date)
     if exclude_id:
-        post_q = post_q.filter(Transaction.id != exclude_id)
+        net_q = net_q.filter(Transaction.id != exclude_id)
 
-    net_change = Decimal("0")
-    for tx in post_q.all():
-        if tx.type == "income":
-            net_change += tx.amount
-        else:
-            net_change -= tx.amount
+    net_change = Decimal(str(net_q.scalar() or 0))
 
     return anchor.running_balance + net_change
 
@@ -360,7 +364,7 @@ def ping():
 # ── Health ────────────────────────────────────────────────────────────────────
 @app.get("/health")
 def health():
-    return {"ok": True, "version": "1.0.1"}
+    return {"ok": True, "version": "1.3.0"}
 
 
 # ── Profile ───────────────────────────────────────────────────────────────────
@@ -721,7 +725,9 @@ async def import_statement(
             else:
                 rows = await parse_pdf(content)
 
-            saved_count = 0
+            # Validate + fingerprint every row first, then resolve all duplicates
+            # in a single IN(...) query instead of one query per row.
+            prepared = []  # list[(validated_dict, fingerprint)]
             for seq, row in enumerate(rows):
                 row["stmt_seq"] = seq  # preserve bank statement row order
                 validated = TransactionIn(**row).model_dump()
@@ -730,38 +736,52 @@ async def import_statement(
                     f"{validated['date']}{validated['amount']}{validated['description']}".encode()
                 ).hexdigest()
                 validated["source_ref"] = fingerprint
+                prepared.append((validated, fingerprint))
 
-                duplicate = (
-                    db.query(Transaction)
+            existing_refs: set[str] = set()
+            if prepared:
+                fingerprints = [fp for _, fp in prepared]
+                existing_refs = {
+                    ref
+                    for (ref,) in db.query(Transaction.source_ref)
                     .filter(
                         Transaction.user_id == user.id,
                         Transaction.source == "statement",
-                        Transaction.source_ref == fingerprint,
+                        Transaction.source_ref.in_(fingerprints),
                     )
-                    .first()
-                )
-                if not duplicate:
-                    new_tx = Transaction(user_id=user.id, **validated)
-                    # Backfill running_balance for rows where the parsed PDF/CSV
-                    # had no Balance column (e.g. receipt PDFs, Spotify invoices).
-                    if new_tx.running_balance is None and new_tx.source != "cash":
-                        prior_bal = _get_balance_at(db, user.id, as_of_date=None)
-                        if prior_bal is not None:
-                            if new_tx.type == "income":
-                                new_tx.running_balance = prior_bal + new_tx.amount
-                            else:
-                                new_tx.running_balance = prior_bal - new_tx.amount
-                    db.add(new_tx)
-                    saved_count += 1
+                    .all()
+                }
+
+            # Backfill anchor balance is computed once: the session has
+            # autoflush=False, so freshly-added (un-flushed) rows are invisible to
+            # _get_balance_at — every per-row call in the old loop returned this
+            # same value. Computing it once is equivalent and avoids N queries.
+            prior_bal = _get_balance_at(db, user.id, as_of_date=None)
+
+            saved_count = 0
+            seen: set[str] = set()
+            for validated, fingerprint in prepared:
+                if fingerprint in existing_refs or fingerprint in seen:
+                    continue  # skip DB duplicates and in-file repeats
+                seen.add(fingerprint)
+                new_tx = Transaction(user_id=user.id, **validated)
+                # Backfill running_balance for rows where the parsed PDF/CSV
+                # had no Balance column (e.g. receipt PDFs, Spotify invoices).
+                if new_tx.running_balance is None and new_tx.source != "cash" and prior_bal is not None:
+                    if new_tx.type == "income":
+                        new_tx.running_balance = prior_bal + new_tx.amount
+                    else:
+                        new_tx.running_balance = prior_bal - new_tx.amount
+                db.add(new_tx)
+                saved_count += 1
 
             db.commit()
             if not rows:
                 job.status = "failed"
                 job.error_message = (
                     "No transactions could be extracted from this file. "
-                    "If this is a scanned/image PDF, install Tesseract OCR on your system "
-                    "(https://github.com/UB-Mannheim/tesseract/wiki) for OCR support. "
-                    "Alternatively, export a digital/text-layer PDF or CSV from your bank."
+                    "If this is a scanned/image PDF, export a digital (text-layer) PDF "
+                    "or a CSV from your bank instead, then re-upload."
                 )
             else:
                 job.status = "done"
@@ -1332,7 +1352,12 @@ def portfolio_summary(
     user: UserContext = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    portfolios = db.query(Portfolio).filter(Portfolio.user_id == user.id).all()
+    portfolios = (
+        db.query(Portfolio)
+        .options(selectinload(Portfolio.holdings))
+        .filter(Portfolio.user_id == user.id)
+        .all()
+    )
     total_invested = 0
     total_current = 0
     by_type = {}
@@ -1446,7 +1471,12 @@ def portfolio_analytics(
     db: Session = Depends(get_db),
 ):
     """Compute Sharpe ratio, XIRR, asset allocation, drawdown for all portfolios."""
-    portfolios = db.query(Portfolio).filter(Portfolio.user_id == user.id).all()
+    portfolios = (
+        db.query(Portfolio)
+        .options(selectinload(Portfolio.holdings))
+        .filter(Portfolio.user_id == user.id)
+        .all()
+    )
     if not portfolios:
         return {"allocation": [], "total_return_pct": 0, "sharpe_ratio": None}
 
