@@ -43,8 +43,18 @@ class Settings(BaseSettings):
             return json.loads(raw)
         return [o.strip() for o in raw.split(",") if o.strip()]
 
-    # Rate limiting
+    # Rate limiting (slowapi format, e.g. "10/minute", "5/hour"). These guard the
+    # endpoints that burn CPU/RAM or free-tier AI provider quota on the single
+    # 512MB Render worker.
     advisor_rate_limit: str = "10/minute"
+    import_rate_limit: str = "10/hour"
+    receipt_rate_limit: str = "20/hour"
+    categorize_rate_limit: str = "60/minute"
+    insights_rate_limit: str = "20/hour"
+
+    # Statement-import bounds (protect the 512MB worker from huge uploads).
+    max_upload_mb: int = 10
+    max_import_rows: int = 5000
 
     # Logging
     log_level: str = "info"

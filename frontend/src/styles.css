@@ -372,16 +372,12 @@ input:focus, select:focus {
 
 .center-add-btn {
   position: relative;
-  top: -24px;
-  background: var(--primary);
-  width: 56px;
-  height: 56px;
-  border-radius: 18px;
+  top: -14px;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: var(--bg);
-  box-shadow: 0 8px 24px var(--primary-glow);
+  background: transparent;
 }
 
 /* ── Proactive Insights ── */
@@ -712,10 +708,12 @@ input:focus, select:focus {
 }
 .mobile-nav-item.center-add-btn {
   position: relative;
-  top: -10px;
-  color: var(--bg);
+  top: -14px;
 }
-.mobile-nav-item.center-add-btn span { color: var(--text-secondary); }
+.mobile-nav-item.center-add-btn span { 
+  color: var(--text-secondary); 
+  margin-top: 4px;
+}
 
 /* ── Error message ── */
 .error-msg {

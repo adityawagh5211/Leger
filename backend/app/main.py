@@ -92,6 +92,7 @@ from .services.prompt_guard import build_safe_messages, sanitize_user_input
 from .services.receipt_ocr import parse_receipt_image
 from .services.sms_parser import parse_sms
 from .services.statements import parse_csv, parse_excel, parse_pdf
+from .services.url_guard import UnsafeURLError, validate_webhook_url
 
 
 # ── Tiered TTL Cache (L1: in-memory with TTL) ─────────────────────────────────
@@ -199,6 +200,10 @@ def _tx_query(db: Session, user_id: str, month: str | None = None):
         start, end = _month_range(month)
         q = q.filter(Transaction.date >= start, Transaction.date < end)
     return q.order_by(Transaction.date.desc(), Transaction.created_at.desc())
+
+
+def _client_ip(request: Request) -> str | None:
+    return request.client.host if request.client else None
 
 
 def _get_balance_at(
@@ -505,6 +510,7 @@ def create_transaction(
 @app.delete("/transactions/{transaction_id}")
 def delete_transaction(
     transaction_id: str,
+    request: Request,
     user: UserContext = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -512,6 +518,10 @@ def delete_transaction(
     if not tx or tx.user_id != user.id:
         raise HTTPException(status_code=404, detail="Transaction not found")
     db.delete(tx)
+    log_event(
+        db, user_id=user.id, action="delete", resource_type="transaction",
+        resource_id=transaction_id, ip_address=_client_ip(request),
+    )
     db.commit()
     logger.info("transaction.deleted user=%s id=%s", user.id, transaction_id)
     return {"deleted": True}
@@ -520,6 +530,7 @@ def delete_transaction(
 @app.post("/transactions/bulk-delete")
 def bulk_delete_transactions(
     payload: BulkDeleteRequest,
+    request: Request,
     user: UserContext = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -537,6 +548,10 @@ def bulk_delete_transactions(
     count = len(txs)
     for tx in txs:
         db.delete(tx)
+    log_event(
+        db, user_id=user.id, action="delete", resource_type="transaction",
+        details={"bulk": True, "count": count}, ip_address=_client_ip(request),
+    )
     db.commit()
     logger.info("transactions.bulk_deleted user=%s count=%d", user.id, count)
     return {"deleted_count": count}
@@ -554,6 +569,7 @@ def list_budgets(
 @app.put("/budgets", response_model=list[BudgetOut])
 def upsert_budgets(
     payload: list[BudgetIn],
+    request: Request,
     user: UserContext = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -568,6 +584,11 @@ def upsert_budgets(
             budget = Budget(user_id=user.id, **item.model_dump())
             db.add(budget)
         saved.append(budget)
+    log_event(
+        db, user_id=user.id, action="update", resource_type="budget",
+        details={"categories": [item.category for item in payload]},
+        ip_address=_client_ip(request),
+    )
     db.commit()
     for b in saved:
         db.refresh(b)
@@ -625,7 +646,9 @@ def get_summary(
 
 # ── SMS Import ────────────────────────────────────────────────────────────────
 @app.post("/imports/sms", response_model=list[TransactionOut])
+@limiter.limit(settings.import_rate_limit)
 def import_sms(
+    request: Request,
     payload: SmsParseRequest,
     user: UserContext = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -693,7 +716,9 @@ def import_sms_webhook(
 
 # ── Statement Import (async job) ──────────────────────────────────────────────
 @app.post("/imports/statement", response_model=ImportJobOut, status_code=202)
+@limiter.limit(settings.import_rate_limit)
 async def import_statement(
+    request: Request,
     file: UploadFile = File(...),
     user: UserContext = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -703,10 +728,15 @@ async def import_statement(
     ext = file.filename.lower().rsplit(".", 1)[-1]
     if ext not in ("csv", "pdf", "xls", "xlsx"):
         raise HTTPException(status_code=400, detail="Upload a CSV, Excel, or PDF statement")
-    if file.size and file.size > 10 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="File too large (max 10MB)")
+    max_bytes = settings.max_upload_mb * 1024 * 1024
+    # Fast-path reject when the client advertises a size; re-checked authoritatively
+    # below since UploadFile.size is often None.
+    if file.size and file.size > max_bytes:
+        raise HTTPException(status_code=400, detail=f"File too large (max {settings.max_upload_mb}MB)")
 
     content = await file.read()
+    if len(content) > max_bytes:
+        raise HTTPException(status_code=400, detail=f"File too large (max {settings.max_upload_mb}MB)")
 
     # Create import job record
     job = ImportJob(user_id=user.id, file_name=file.filename, status="processing")
@@ -724,6 +754,16 @@ async def import_statement(
                 rows = parse_excel(content)
             else:
                 rows = await parse_pdf(content)
+
+            # Cap row count so a pathological file can't exhaust the 512MB worker.
+            if len(rows) > settings.max_import_rows:
+                job.status = "failed"
+                job.error_message = (
+                    f"Statement has {len(rows)} rows, over the "
+                    f"{settings.max_import_rows}-row limit. Split the file and re-upload."
+                )
+                db.commit()
+                return
 
             # Validate + fingerprint every row first, then resolve all duplicates
             # in a single IN(...) query instead of one query per row.
@@ -760,6 +800,7 @@ async def import_statement(
 
             saved_count = 0
             seen: set[str] = set()
+            pending = 0
             for validated, fingerprint in prepared:
                 if fingerprint in existing_refs or fingerprint in seen:
                     continue  # skip DB duplicates and in-file repeats
@@ -774,6 +815,12 @@ async def import_statement(
                         new_tx.running_balance = prior_bal - new_tx.amount
                 db.add(new_tx)
                 saved_count += 1
+                pending += 1
+                # Flush+commit in chunks so the session's pending set stays bounded
+                # instead of holding every row in memory until one final commit.
+                if pending >= 500:
+                    db.commit()
+                    pending = 0
 
             db.commit()
             if not rows:
@@ -890,8 +937,12 @@ async def advisor_stream(
     db.add(user_msg)
     db.commit()
 
-    # Simple hashing of the complete message context
-    cache_key = hashlib.sha256(json.dumps(messages).encode()).hexdigest()
+    # Hash the complete message context, scoped to the user. The user prefix is
+    # required so TTLCache.invalidate_user (which matches on the "{user_id}:"
+    # prefix) actually evicts these entries when the user corrects a category —
+    # otherwise stale advice lingers. It also rules out cross-user cache hits.
+    context_hash = hashlib.sha256(json.dumps(messages).encode()).hexdigest()
+    cache_key = f"{user.id}:advisor:{context_hash}"
     cached_reply = llm_cache.get(cache_key)
 
     if cached_reply:
@@ -1037,6 +1088,7 @@ def create_account(
 def update_account(
     account_id: str,
     payload: AccountIn,
+    request: Request,
     user: UserContext = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -1045,6 +1097,10 @@ def update_account(
         raise HTTPException(status_code=404, detail="Account not found")
     for k, v in payload.model_dump().items():
         setattr(acct, k, v)
+    log_event(
+        db, user_id=user.id, action="update", resource_type="account",
+        resource_id=account_id, ip_address=_client_ip(request),
+    )
     db.commit()
     db.refresh(acct)
     return acct
@@ -1053,6 +1109,7 @@ def update_account(
 @app.delete("/accounts/{account_id}")
 def delete_account(
     account_id: str,
+    request: Request,
     user: UserContext = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -1060,6 +1117,10 @@ def delete_account(
     if not acct or acct.user_id != user.id:
         raise HTTPException(status_code=404, detail="Account not found")
     acct.is_active = False  # soft delete
+    log_event(
+        db, user_id=user.id, action="delete", resource_type="account",
+        resource_id=account_id, ip_address=_client_ip(request),
+    )
     db.commit()
     logger.info("account.deleted user=%s id=%s", user.id, account_id)
     return {"deleted": True}
@@ -1067,7 +1128,9 @@ def delete_account(
 
 # ── Auto-categorize ──────────────────────────────────────────────────────────
 @app.post("/categorize", response_model=CategorizeSingleResponse)
+@limiter.limit(settings.categorize_rate_limit)
 async def auto_categorize(
+    request: Request,
     payload: CategorizeSingleRequest,
     user: UserContext = Depends(get_current_user),
 ):
@@ -1076,7 +1139,9 @@ async def auto_categorize(
 
 
 @app.post("/categorize/batch")
+@limiter.limit(settings.categorize_rate_limit)
 async def auto_categorize_batch(
+    request: Request,
     payload: CategorizeBatchRequest,
     user: UserContext = Depends(get_current_user),
 ):
@@ -1090,7 +1155,9 @@ async def auto_categorize_batch(
 
 # ── Receipt OCR ───────────────────────────────────────────────────────────────
 @app.post("/receipts/scan")
+@limiter.limit(settings.receipt_rate_limit)
 async def scan_receipt(
+    request: Request,
     file: UploadFile = File(...),
     user: UserContext = Depends(get_current_user),
 ):
@@ -1114,6 +1181,7 @@ async def scan_receipt(
 def update_transaction(
     transaction_id: str,
     payload: TransactionIn,
+    request: Request,
     user: UserContext = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -1122,6 +1190,10 @@ def update_transaction(
         raise HTTPException(status_code=404, detail="Transaction not found")
     for k, v in payload.model_dump().items():
         setattr(tx, k, v)
+    log_event(
+        db, user_id=user.id, action="update", resource_type="transaction",
+        resource_id=tx.id, ip_address=_client_ip(request),
+    )
     db.commit()
     db.refresh(tx)
     logger.info("transaction.updated user=%s id=%s", user.id, tx.id)
@@ -1156,6 +1228,12 @@ def create_webhook(
     user: UserContext = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    # SSRF guard: reject URLs that resolve to loopback/private/metadata addresses.
+    try:
+        validate_webhook_url(payload.url)
+    except UnsafeURLError as e:
+        raise HTTPException(status_code=400, detail=f"Unsafe webhook URL: {e}") from e
+
     hook = Webhook(user_id=user.id, **payload.model_dump())
     db.add(hook)
     log_event(
@@ -1268,6 +1346,7 @@ def create_portfolio(
 @app.delete("/portfolios/{portfolio_id}")
 def delete_portfolio(
     portfolio_id: str,
+    request: Request,
     user: UserContext = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -1275,6 +1354,10 @@ def delete_portfolio(
     if not p or p.user_id != user.id:
         raise HTTPException(status_code=404, detail="Portfolio not found")
     db.delete(p)
+    log_event(
+        db, user_id=user.id, action="delete", resource_type="portfolio",
+        resource_id=portfolio_id, ip_address=_client_ip(request),
+    )
     db.commit()
     return {"deleted": True}
 
@@ -1313,6 +1396,7 @@ def add_holding(
 def update_holding(
     holding_id: str,
     payload: HoldingIn,
+    request: Request,
     user: UserContext = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -1324,6 +1408,10 @@ def update_holding(
         raise HTTPException(status_code=404, detail="Not authorized")
     for k, v in payload.model_dump().items():
         setattr(h, k, v)
+    log_event(
+        db, user_id=user.id, action="update", resource_type="holding",
+        resource_id=holding_id, ip_address=_client_ip(request),
+    )
     db.commit()
     db.refresh(h)
     return h
@@ -1332,6 +1420,7 @@ def update_holding(
 @app.delete("/holdings/{holding_id}")
 def delete_holding(
     holding_id: str,
+    request: Request,
     user: UserContext = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -1342,6 +1431,10 @@ def delete_holding(
     if not p or p.user_id != user.id:
         raise HTTPException(status_code=404, detail="Not authorized")
     db.delete(h)
+    log_event(
+        db, user_id=user.id, action="delete", resource_type="holding",
+        resource_id=holding_id, ip_address=_client_ip(request),
+    )
     db.commit()
     return {"deleted": True}
 
@@ -1397,7 +1490,9 @@ def credit_health(
 
 # ── Bill Negotiator ───────────────────────────────────────────────────────────
 @app.get("/bills/negotiate")
+@limiter.limit(settings.insights_rate_limit)
 async def negotiate_bills(
+    request: Request,
     user: UserContext = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -1486,7 +1581,9 @@ def portfolio_analytics(
 
 # ── Proactive Insights (upgraded — with anomaly + forecast context) ────────────
 @app.get("/insights/proactive", response_model=list[ProactiveInsight])
+@limiter.limit(settings.insights_rate_limit)
 async def proactive_insights_v2(
+    request: Request,
     user: UserContext = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -1556,7 +1653,9 @@ def embedding_cache_stats(
 
 # ── Mass Recategorize (new categories support) ────────────────────────────────
 @app.post("/categorize/recategorize")
+@limiter.limit(settings.categorize_rate_limit)
 async def recategorize_uncategorized(
+    request: Request,
     offset: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     user: UserContext = Depends(get_current_user),

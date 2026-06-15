@@ -1,5 +1,5 @@
 import React from "react";
-import { apiFetch, money, EXPENSE_CATEGORIES, CATEGORY_COLORS } from "../lib";
+import { apiFetch, money, EXPENSE_CATEGORIES, CATEGORY_COLORS, paletteColor } from "../lib";
 import { useToast } from "../components/ui";
 import { AlertTriangle, TrendingUp, TrendingDown, BarChart3, Activity, Zap } from "lucide-react";
 import {
@@ -100,9 +100,11 @@ export default function Analytics() {
   });
 
   // Spending heatmap: day × category intensity
-  const heatmapData = topCats.map(cat => {
+  const heatmapData = topCats.map((cat, i) => {
     const catTotal = Number(byCategory[cat] || 0);
-    return { category: cat, value: catTotal, color: CATEGORY_COLORS[cat] || "var(--text-secondary)" };
+    const norm = cat.charAt(0).toUpperCase() + cat.slice(1).toLowerCase();
+    const color = CATEGORY_COLORS[norm] || CATEGORY_COLORS[cat] || paletteColor(cat, i);
+    return { category: cat, value: catTotal, color };
   }).sort((a, b) => b.value - a.value);
 
   // Monthly cash flow with net line
@@ -450,9 +452,11 @@ export default function Analytics() {
                 {Object.entries(byCategory)
                   .sort((a,b) => Number(b[1]) - Number(a[1]))
                   .slice(0,10)
-                  .map(([cat]) => (
-                    <Cell key={cat} fill={CATEGORY_COLORS[cat] || "var(--text-secondary)"} />
-                  ))}
+                  .map(([cat], i) => {
+                    const norm = cat.charAt(0).toUpperCase() + cat.slice(1).toLowerCase();
+                    const color = CATEGORY_COLORS[norm] || CATEGORY_COLORS[cat] || paletteColor(cat, i);
+                    return <Cell key={cat} fill={color} />;
+                  })}
               </Bar>
             </BarChart>
           </ResponsiveContainer>

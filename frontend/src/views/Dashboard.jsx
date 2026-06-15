@@ -1,5 +1,5 @@
 import React from "react";
-import { apiFetch, money, CATEGORY_COLORS } from "../lib";
+import { apiFetch, money, CATEGORY_COLORS, paletteColor } from "../lib";
 import { CardSkeleton } from "../components/ui";
 import { useToast } from "../components/ui";
 import ProactiveInsights from "../components/ProactiveInsights";
@@ -303,9 +303,11 @@ export default function Dashboard({ analyticsOnly = false }) {
               <ResponsiveContainer width="100%" height={240}>
                 <PieChart>
                   <Pie data={pieRows} dataKey="value" innerRadius={62} outerRadius={95} paddingAngle={3} strokeWidth={0}>
-                    {pieRows.map((r) => (
-                      <Cell key={r.name} fill={CATEGORY_COLORS[r.name] || "var(--text-secondary)"} />
-                    ))}
+                    {pieRows.map((r, i) => {
+                      const norm = r.name.charAt(0).toUpperCase() + r.name.slice(1).toLowerCase();
+                      const color = CATEGORY_COLORS[norm] || CATEGORY_COLORS[r.name] || paletteColor(r.name, i);
+                      return <Cell key={r.name} fill={color} />;
+                    })}
                   </Pie>
                   <Tooltip content={<CustomTooltip />} />
                   <Legend iconSize={8} iconType="circle" wrapperStyle={{ fontSize: 12, paddingTop: 12 }} />
