@@ -32,10 +32,8 @@ export default function Auth() {
           { headers: { Authorization: `Bearer ${tokenResponse.access_token}` } }
         );
         if (!res.ok) throw new Error('Failed to fetch user info from Google');
-
-        // For the backend we send the access_token as Bearer; Google verifies
-        // access_tokens at https://oauth2.googleapis.com/tokeninfo
-        persistCredential(tokenResponse.access_token);
+        const userInfo = await res.json(); // { sub, email, name, picture }
+        persistCredential(tokenResponse.access_token, userInfo);
       } catch (err) {
         setError(err.message);
         setLoading(false);

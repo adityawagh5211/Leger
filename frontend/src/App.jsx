@@ -1,7 +1,7 @@
 import React, { useState, useEffect, lazy, Suspense } from "react";
 import { Routes, Route, Navigate, useLocation, useNavigate } from "react-router";
 import { useQuery } from "@tanstack/react-query";
-import { loadPersistedCredential, clearCredential, onAuthChange, parseIdToken } from "./google-auth";
+import { loadPersistedCredential, clearCredential, onAuthChange, getUserInfo } from "./google-auth";
 import { apiFetch, API_BASE, EXPENSE_CATEGORIES, setAuthToken, today, KEYS } from "./lib";
 import { useToast, LedgerLogo, CardSkeleton } from "./components/ui";
 import Auth from "./views/Auth";
@@ -115,14 +115,15 @@ export default function App() {
   useEffect(() => {
     const credential = loadPersistedCredential();
     if (credential) {
-      setSession({ credential });
+      const userInfo = getUserInfo();
+      setSession({ credential, userInfo });
       setAuthToken(credential);
     }
     setLoadingAuth(false);
 
-    const unsubscribe = onAuthChange((credential) => {
+    const unsubscribe = onAuthChange((credential, userInfo) => {
       if (credential) {
-        setSession({ credential });
+        setSession({ credential, userInfo });
         setAuthToken(credential);
       } else {
         setSession(null);
@@ -225,7 +226,7 @@ export default function App() {
 
   if (!session) return (<><ColdStart /><Auth /></>);
 
-  const googleUser = session?.credential ? parseIdToken(session.credential) : null;
+  const googleUser = session?.userInfo || null;
   const userEmail = profileData?.email || googleUser?.email || null;
   const userId = profileData?.id || googleUser?.sub || "";
   const initials = getInitials(profileData?.display_name, userEmail);
