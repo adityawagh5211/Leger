@@ -19,6 +19,7 @@ const Investments   = lazy(() => import("./views/Investments"));
 const CreditBenchmarks = lazy(() => import("./views/CreditBenchmarks"));
 const Analytics     = lazy(() => import("./views/Analytics"));
 const Profile       = lazy(() => import("./views/Profile"));
+const Privacy       = lazy(() => import("./views/Privacy"));
 
 import {
   LayoutDashboard, Plus, Target, BarChart3, Sparkles,
@@ -209,6 +210,16 @@ export default function App() {
           <Loader2 size={24} className="spin" style={{ color: "var(--primary)" }} />
         </div>
       </div>
+    );
+  }
+
+  // /privacy is public — render before the session check so Google's
+  // consent screen link works for unauthenticated visitors.
+  if (location.pathname === "/privacy") {
+    return (
+      <Suspense fallback={<div style={{ minHeight: "100vh", background: "var(--bg)" }} />}>
+        <Privacy />
+      </Suspense>
     );
   }
 

@@ -121,14 +121,34 @@ export default function Auth() {
         <div style={{
           marginTop: 32,
           display: 'flex',
+          flexDirection: 'column',
           alignItems: 'center',
-          justifyContent: 'center',
-          gap: 6,
-          color: 'var(--text-muted)',
-          fontSize: 12,
-          fontWeight: 500,
+          gap: 10,
         }}>
-          <ShieldCheck size={14} /> Secure &amp; Encrypted
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 6,
+            color: 'var(--text-muted)',
+            fontSize: 12,
+            fontWeight: 500,
+          }}>
+            <ShieldCheck size={14} /> Secure &amp; Encrypted
+          </div>
+          <a
+            href="/privacy"
+            style={{
+              color: 'var(--text-muted)',
+              fontSize: 12,
+              textDecoration: 'none',
+              transition: 'color 0.15s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.color = 'var(--primary)'}
+            onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}
+          >
+            Privacy Policy
+          </a>
         </div>
       </div>
     </div>
