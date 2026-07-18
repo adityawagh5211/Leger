@@ -3,8 +3,8 @@ FROM node:22-slim AS build
 
 WORKDIR /app
 
-COPY package.json package-lock.json* .npmrc* ./
-RUN npm install --legacy-peer-deps
+COPY package.json package-lock.json ./
+RUN npm ci --legacy-peer-deps
 
 COPY tsconfig.json ./
 COPY src ./src
@@ -14,8 +14,8 @@ RUN npx tsc -p tsconfig.json
 FROM node:22-slim AS deps
 
 WORKDIR /app
-COPY package.json package-lock.json* .npmrc* ./
-RUN npm install --omit=dev --legacy-peer-deps
+COPY package.json package-lock.json ./
+RUN npm ci --legacy-peer-deps --omit=dev
 
 # ── Stage 3: runtime ──────────────────────────────────────────────────────────
 FROM node:22-slim AS runtime
